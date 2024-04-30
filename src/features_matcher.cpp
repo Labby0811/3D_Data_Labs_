@@ -77,9 +77,45 @@ void FeatureMatcher::exhaustiveMatching() {
             // setMatches( i, j, inlier_matches);
             /////////////////////////////////////////////////////////////////////////////////////////
 
+            std::vector <cv::DMatch> matches;
+            cv::BFMatcher matcher(cv::NORM_L2);
+            matcher.match(descriptors_[i], descriptors_[j], matches);
 
+            std::vector <cv::Point2f> points_i, points_j;
+            for (const auto &match: matches) {
+                points_i.push_back(features_[i][match.queryIdx].pt);
+                points_j.push_back(features_[j][match.trainIdx].pt);
+            }
+            cv::Mat mask;
+            cv::Mat essential_matrix = cv::findEssentialMat(points_i, points_j, new_intrinsics_matrix_, cv::RANSAC,
+                                                            0.99, 1.0, mask);
 
+            cv::Mat mask_essential;
+            cv::Mat essential_matrix = cv::findEssentialMat(points_i, points_j, new_intrinsics_matrix_, cv::RANSAC,
+                                                            0.999, 1.0, mask_essential);
 
+            cv::Mat mask_homography;
+            cv::Mat homography_matrix = cv::findHomography(points_i, points_j, cv::RANSAC, 1.0, mask_homography);
+
+            std::vector <cv::DMatch> inliers_essential;
+            std::vector <cv::DMatch> inliers_homography;
+            for (size_t k = 0; k < matches.size(); ++k) {
+                if (mask_essential.at<uchar>(k))
+                    inliers_essential.push_back(matches[k]);
+                if (mask_homography.at<uchar>(k))
+                    inliers_homography.push_back(matches[k]);
+            }
+
+            std::vector <cv::DMatch> combined_inliers;
+            for (const auto &match: inliers_essential) {
+                if (std::find(inliers_homography.begin(), inliers_homography.end(), match) != inliers_homography.end())
+                    combined_inliers.push_back(match);
+            }
+
+            if (combined_inliers.size() <= 5)
+                continue;
+
+            setMatches(i, j, combined_inliers);
 
             /////////////////////////////////////////////////////////////////////////////////////////
 
