@@ -83,7 +83,7 @@ void BasicSfM::readFromFile ( const std::string& filename, bool load_initial_gue
   FscanfOrDie(fptr, "%d", &num_points_);
   FscanfOrDie(fptr, "%d", &num_observations_);
 
-  cout << "Header: " << num_cam_poses_
+  std::cout << "Header: " << num_cam_poses_
        << " " << num_points_
        << " " << num_observations_<<std::endl;
 
@@ -520,11 +520,25 @@ bool BasicSfM::incrementalReconstruction( int seed_pair_idx0, int seed_pair_idx1
   // IN case of "good" sideward motion, store the transformation into init_r_mat and  init_t_vec; defined above
   /////////////////////////////////////////////////////////////////////////////////////////
 
+  //finding inliers in E and H
+  cv::Mat E = findEssentialMat(points0, points1, intrinsics_matrix, cv::RANSAC, 0.999, 0.001, inlier_mask_E);
+  findHomography(points0, points1, cv::RANSAC, 0.001, inlier_mask_H);
+
+  //check if inliers in H are more than inliers in E
+  if( countNonZero(inlier_mask_H) >= countNonZero(inlier_mask_E) )
+    return false;
   
+  //If inliers in E are more than inliers in H
+  cv::Mat R, t;
+  recoverPose(E, points0, points1, intrinsics_matrix, R, t, inlier_mask_E);
+
+  //Check if the recovered transformation is mainly given by a sideward motion
+  if(abs(t.at<double>(0,0)) < abs(t.at<double>(2,0))) //********COMMENTO******* NON SO SE METTERE ANCHE abs(t.at<double>(0,0)) < abs(t.at<double>(1,0))
+    return false;
   
-  
-  
-  
+  //If the recovered transformation is mainly given by a sideward motion
+  init_r_mat = R;
+  init_t_vec = t;
   
 
   /////////////////////////////////////////////////////////////////////////////////////////
@@ -724,12 +738,12 @@ bool BasicSfM::incrementalReconstruction( int seed_pair_idx0, int seed_pair_idx1
       }
     }
 
-    cout<<"ADDED "<<n_new_pts<<" new points"<<endl;
+    std::cout<<"ADDED "<<n_new_pts<<" new points"<<endl;
 
-    cout << "Using " << iter + 2 << " over " << num_cam_poses_ << " cameras" << endl;
+    std::cout << "Using " << iter + 2 << " over " << num_cam_poses_ << " cameras" << endl;
     for(int i = 0; i < int(cam_pose_optim_iter_.size()); i++ )
-      cout << int(cam_pose_optim_iter_[i]) << " ";
-    cout<<endl;
+      std::cout << int(cam_pose_optim_iter_[i]) << " ";
+    std::cout<<endl;
 
     // Execute an iteration of bundle adjustment
     bundleAdjustmentIter(new_cam_pose_idx );
