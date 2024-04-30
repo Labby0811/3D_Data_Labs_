@@ -34,11 +34,11 @@ void FeatureMatcher::extractFeatures() {
         // it into feats_colors_[i] vector
         /////////////////////////////////////////////////////////////////////////////////////////
 
-        cv::Ptr <cv::SIFT> sift = cv::SIFT::create();
+        cv::Ptr <cv::ORB> orb = cv::ORB::create();
 
         std::vector <cv::KeyPoint> keypoints;
         cv::Mat descriptors;
-        sift->detectAndCompute(input_image, cv::noArray(), keypoints, descriptors);
+        orb->detectAndCompute(img, cv::noArray(), keypoints, descriptors);
 
         features_[i] = keypoints;
         descriptors_[i] = descriptors;
@@ -47,7 +47,7 @@ void FeatureMatcher::extractFeatures() {
         for (const auto &kp: keypoints) {
             int x = static_cast<int>(kp.pt.x);
             int y = static_cast<int>(kp.pt.y);
-            colors.push_back(input_image.at<cv::Vec3b>(y, x));
+            colors.push_back(img.at<cv::Vec3b>(y, x));
         }
         feats_colors_[i] = colors;
 
@@ -86,9 +86,6 @@ void FeatureMatcher::exhaustiveMatching() {
                 points_i.push_back(features_[i][match.queryIdx].pt);
                 points_j.push_back(features_[j][match.trainIdx].pt);
             }
-            cv::Mat mask;
-            cv::Mat essential_matrix = cv::findEssentialMat(points_i, points_j, new_intrinsics_matrix_, cv::RANSAC,
-                                                            0.99, 1.0, mask);
 
             cv::Mat mask_essential;
             cv::Mat essential_matrix = cv::findEssentialMat(points_i, points_j, new_intrinsics_matrix_, cv::RANSAC,
@@ -106,16 +103,13 @@ void FeatureMatcher::exhaustiveMatching() {
                     inliers_homography.push_back(matches[k]);
             }
 
-            std::vector <cv::DMatch> combined_inliers;
-            for (const auto &match: inliers_essential) {
-                if (std::find(inliers_homography.begin(), inliers_homography.end(), match) != inliers_homography.end())
-                    combined_inliers.push_back(match);
-            }
-
-            if (combined_inliers.size() <= 5)
+            if (inliers_essential.size() <= 5 && inliers_homography.size() <= 5)
                 continue;
 
-            setMatches(i, j, combined_inliers);
+            if (inliers_essential.size() < inliers_homography.size())
+                setMatches(i, j, inliers_homography);
+            else
+                setMatches(i, j, inliers_essential);
 
             /////////////////////////////////////////////////////////////////////////////////////////
 
