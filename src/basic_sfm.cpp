@@ -711,7 +711,7 @@ bool BasicSfM::incrementalReconstruction( int seed_pair_idx0, int seed_pair_idx1
             // Triangulate the 3D point with index pt_idx by using the observation of this point in the
             // camera poses with indices new_cam_pose_idx and cam_idx. The pointers cam0_data and cam1_data
             // point to the 6D pose blocks for these inside the parameters vector (e.g.,
-            // cam0_data[0], cam0_data[1], cam0_data[2] hold the axis-angle representation fo the rotation of the
+            // cam0_data[0], cam0_data[1], cam0_data[2] hold the axis-angle representation of the rotation of the
             // camera with index new_cam_pose_idx.
             // Use the OpenCV cv::triangulatePoints() function, remembering to check the cheirality constraint
             // for both cameras
@@ -726,9 +726,34 @@ bool BasicSfM::incrementalReconstruction( int seed_pair_idx0, int seed_pair_idx1
             // pt[2] = /*X coordinate of the estimated point */;
             /////////////////////////////////////////////////////////////////////////////////////////
 
-                
-                
+            //transform from axis_angle representation to rotation matrix and fill the projection matrix 0
+            cv::Vec3d axis_angle0(cam0_data[0], cam0_data[1], cam0_data[2]);
+            cv::Rodrigues(axis_angle0, proj_mat0(cv::Rect(0, 0, 3, 3)));
+            proj_mat0.at<double>(0, 3) = cam0_data[3];
+            proj_mat0.at<double>(1, 3) = cam0_data[4];
+            proj_mat0.at<double>(2, 3) = cam0_data[5];
 
+            //transform from axis_angle representation to rotation matrix and fill the projection matrix 1
+            cv::Vec3d axis_angle1(cam1_data[0], cam1_data[1], cam1_data[2]);
+            cv::Rodrigues(axis_angle1, proj_mat1(cv::Rect(0, 0, 3, 3)));
+            proj_mat1.at<double>(0, 3) = cam1_data[3];
+            proj_mat1.at<double>(1, 3) = cam1_data[4];
+            proj_mat1.at<double>(2, 3) = cam1_data[5];
+
+            cv::triangulatePoints( proj_mat0, proj_mat1, cam_observation_[new_cam_pose_idx][pt_idx], cam_observation_[cam_idx][pt_idx], hpoints4D );    
+            
+            //check cheirality constraint
+            if(checkCheiralityConstraint(new_cam_pose_idx, pt_idx) && checkCheiralityConstraint(cam_idx, pt_idx))
+            {
+              n_new_pts++;
+              pts_optim_iter_[pt_idx] = 1;
+              double *pt = pointBlockPtr(pt_idx);
+              
+              //from homogeneous coord to euclidean
+              pt[0] = hpoints4D.at<double>(0)/hpoints4D.at<double>(3);   
+              pt[1] = hpoints4D.at<double>(1)/hpoints4D.at<double>(3);
+              pt[2] = hpoints4D.at<double>(2)/hpoints4D.at<double>(3);
+            }
                 
                 
             /////////////////////////////////////////////////////////////////////////////////////////
