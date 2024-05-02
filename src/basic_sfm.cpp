@@ -83,7 +83,7 @@ void BasicSfM::readFromFile ( const std::string& filename, bool load_initial_gue
   FscanfOrDie(fptr, "%d", &num_points_);
   FscanfOrDie(fptr, "%d", &num_observations_);
 
-  cout << "Header: " << num_cam_poses_
+  std::cout << "Header: " << num_cam_poses_
        << " " << num_points_
        << " " << num_observations_<<std::endl;
 
@@ -520,11 +520,25 @@ bool BasicSfM::incrementalReconstruction( int seed_pair_idx0, int seed_pair_idx1
   // IN case of "good" sideward motion, store the transformation into init_r_mat and  init_t_vec; defined above
   /////////////////////////////////////////////////////////////////////////////////////////
 
+  //finding inliers in E and H
+  cv::Mat E = findEssentialMat(points0, points1, intrinsics_matrix, cv::RANSAC, 0.999, 0.001, inlier_mask_E);
+  findHomography(points0, points1, cv::RANSAC, 0.001, inlier_mask_H);
+
+  //check if inliers in H are more than inliers in E
+  if( countNonZero(inlier_mask_H) >= countNonZero(inlier_mask_E) )
+    return false;
   
+  //If inliers in E are more than inliers in H
+  cv::Mat R, t;
+  recoverPose(E, points0, points1, intrinsics_matrix, R, t, inlier_mask_E);
+
+  //Check if the recovered transformation is mainly given by a sideward motion
+  if(abs(t.at<double>(0,0)) < abs(t.at<double>(2,0))) //********COMMENTO******* NON SO SE METTERE ANCHE abs(t.at<double>(0,0)) < abs(t.at<double>(1,0))
+    return false;
   
-  
-  
-  
+  //If the recovered transformation is mainly given by a sideward motion
+  init_r_mat = R;
+  init_t_vec = t;
   
 
   /////////////////////////////////////////////////////////////////////////////////////////
@@ -697,7 +711,7 @@ bool BasicSfM::incrementalReconstruction( int seed_pair_idx0, int seed_pair_idx1
             // Triangulate the 3D point with index pt_idx by using the observation of this point in the
             // camera poses with indices new_cam_pose_idx and cam_idx. The pointers cam0_data and cam1_data
             // point to the 6D pose blocks for these inside the parameters vector (e.g.,
-            // cam0_data[0], cam0_data[1], cam0_data[2] hold the axis-angle representation fo the rotation of the
+            // cam0_data[0], cam0_data[1], cam0_data[2] hold the axis-angle representation of the rotation of the
             // camera with index new_cam_pose_idx.
             // Use the OpenCV cv::triangulatePoints() function, remembering to check the cheirality constraint
             // for both cameras
@@ -712,9 +726,34 @@ bool BasicSfM::incrementalReconstruction( int seed_pair_idx0, int seed_pair_idx1
             // pt[2] = /*X coordinate of the estimated point */;
             /////////////////////////////////////////////////////////////////////////////////////////
 
-                
-                
+            //transform from axis_angle representation to rotation matrix and fill the projection matrix 0
+            cv::Vec3d axis_angle0(cam0_data[0], cam0_data[1], cam0_data[2]);
+            cv::Rodrigues(axis_angle0, proj_mat0(cv::Rect(0, 0, 3, 3)));
+            proj_mat0.at<double>(0, 3) = cam0_data[3];
+            proj_mat0.at<double>(1, 3) = cam0_data[4];
+            proj_mat0.at<double>(2, 3) = cam0_data[5];
 
+            //transform from axis_angle representation to rotation matrix and fill the projection matrix 1
+            cv::Vec3d axis_angle1(cam1_data[0], cam1_data[1], cam1_data[2]);
+            cv::Rodrigues(axis_angle1, proj_mat1(cv::Rect(0, 0, 3, 3)));
+            proj_mat1.at<double>(0, 3) = cam1_data[3];
+            proj_mat1.at<double>(1, 3) = cam1_data[4];
+            proj_mat1.at<double>(2, 3) = cam1_data[5];
+
+            cv::triangulatePoints( proj_mat0, proj_mat1, cam_observation_[new_cam_pose_idx][pt_idx], cam_observation_[cam_idx][pt_idx], hpoints4D );    
+            
+            //check cheirality constraint
+            if(checkCheiralityConstraint(new_cam_pose_idx, pt_idx) && checkCheiralityConstraint(cam_idx, pt_idx))
+            {
+              n_new_pts++;
+              pts_optim_iter_[pt_idx] = 1;
+              double *pt = pointBlockPtr(pt_idx);
+              
+              //from homogeneous coord to euclidean
+              pt[0] = hpoints4D.at<double>(0)/hpoints4D.at<double>(3);   
+              pt[1] = hpoints4D.at<double>(1)/hpoints4D.at<double>(3);
+              pt[2] = hpoints4D.at<double>(2)/hpoints4D.at<double>(3);
+            }
                 
                 
             /////////////////////////////////////////////////////////////////////////////////////////
@@ -724,12 +763,12 @@ bool BasicSfM::incrementalReconstruction( int seed_pair_idx0, int seed_pair_idx1
       }
     }
 
-    cout<<"ADDED "<<n_new_pts<<" new points"<<endl;
+    std::cout<<"ADDED "<<n_new_pts<<" new points"<<endl;
 
-    cout << "Using " << iter + 2 << " over " << num_cam_poses_ << " cameras" << endl;
+    std::cout << "Using " << iter + 2 << " over " << num_cam_poses_ << " cameras" << endl;
     for(int i = 0; i < int(cam_pose_optim_iter_.size()); i++ )
-      cout << int(cam_pose_optim_iter_[i]) << " ";
-    cout<<endl;
+      std::cout << int(cam_pose_optim_iter_[i]) << " ";
+    std::cout<<endl;
 
     // Execute an iteration of bundle adjustment
     bundleAdjustmentIter(new_cam_pose_idx );
