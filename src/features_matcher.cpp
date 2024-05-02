@@ -36,15 +36,10 @@ void FeatureMatcher::extractFeatures() {
 
         cv::Ptr <cv::ORB> orb = cv::ORB::create();
 
-        std::vector <cv::KeyPoint> keypoints;
-        cv::Mat descriptors;
-        orb->detectAndCompute(img, cv::noArray(), keypoints, descriptors);
-
-        features_[i] = keypoints;
-        descriptors_[i] = descriptors;
+        orb->detectAndCompute(img, cv::noArray(), features_[i], descriptors_[i]);
 
         std::vector <cv::Vec3b> colors;
-        for (const auto &kp: keypoints) {
+        for (const auto &kp: features_[i]) {
             int x = static_cast<int>(kp.pt.x);
             int y = static_cast<int>(kp.pt.y);
             colors.push_back(img.at<cv::Vec3b>(y, x));
@@ -94,23 +89,17 @@ void FeatureMatcher::exhaustiveMatching() {
             cv::Mat mask_homography;
             cv::Mat homography_matrix = cv::findHomography(points_i, points_j, cv::RANSAC, 1.0, mask_homography);
 
-            std::vector <cv::DMatch> inliers_essential;
-            std::vector <cv::DMatch> inliers_homography;
+            std::vector <cv::DMatch> inliers;
             for (size_t k = 0; k < matches.size(); ++k) {
-                if (mask_essential.at<uchar>(k))
-                    inliers_essential.push_back(matches[k]);
-                if (mask_homography.at<uchar>(k))
-                    inliers_homography.push_back(matches[k]);
+                if (mask_essential.at<uchar>(k) && mask_homography.at<uchar>(k))
+                    inliers.push_back(matches[k]);
             }
 
-            if (inliers_essential.size() <= 5 && inliers_homography.size() <= 5)
-                continue;
+            if (inliers.size() > 5)
+                setMatches(i, j, inliers);
 
-            if (inliers_essential.size() < inliers_homography.size())
-                setMatches(i, j, inliers_homography);
-            else
-                setMatches(i, j, inliers_essential);
-
+            inliers.clear();
+            matches.clear();
             /////////////////////////////////////////////////////////////////////////////////////////
 
         }
