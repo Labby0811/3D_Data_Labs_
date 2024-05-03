@@ -59,7 +59,7 @@ struct ReprojectionError {
     }
 
     static ceres::CostFunction *Create(const double observed_x, const double observed_y) {
-        return new ceres::AutoDiffCostFunction<ReprojectionError, 2, 6, 3>(observed_x, observed_y);
+        return (new ceres::AutoDiffCostFunction<ReprojectionError,2,6,3>(new ReprojectionError(observed_x,observed_y)));
     }
 
 
@@ -481,7 +481,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
 
     //finding inliers in E and H
     cv::Mat E = findEssentialMat(points0, points1, intrinsics_matrix, cv::RANSAC, 0.999, 0.001, inlier_mask_E);
-    findHomography(points0, points1, cv::RANSAC, 0.001, inlier_mask_H);
+    cv::Mat H = findHomography(points0, points1, cv::RANSAC, 0.001, inlier_mask_H);
 
     //check if inliers in H are more than inliers in E
     if (countNonZero(inlier_mask_H) >= countNonZero(inlier_mask_E))
@@ -492,8 +492,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
     recoverPose(E, points0, points1, intrinsics_matrix, R, t, inlier_mask_E);
 
     //Check if the recovered transformation is mainly given by a sideward motion
-    if (abs(t.at<double>(0, 0)) < abs(t.at<double>(2,
-                                                   0))) //********COMMENTO******* NON SO SE METTERE ANCHE abs(t.at<double>(0,0)) < abs(t.at<double>(1,0))
+    if (abs(t.at<double>(0, 0)) < abs(t.at<double>(2, 0))) //********COMMENTO******* NON SO SE METTERE ANCHE abs(t.at<double>(0,0)) < abs(t.at<double>(1,0))
         return false;
 
     //If the recovered transformation is mainly given by a sideward motion
@@ -762,6 +761,9 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         //  if( <bad reconstruction> )
         //    return false;
 
+        // ....
+        
+
         /////////////////////////////////////////////////////////////////////////////////////////
     }
 
@@ -811,29 +813,15 @@ void BasicSfM::bundleAdjustmentIter(int new_cam_idx) {
                 // while the point position blocks have size (point_block_size_) of 3 elements.
                 //////////////////////////////////////////////////////////////////////////////////
 
-                // check initgooglelogginh
-                // The variable to solve for with its initial value.
-                double initial_x = 5.0;
-                double x = initial_x;
-
-                // Build the problem.
-                ceres::Problem problem;
+                // TODO: check initgooglelogginh
 
                 // Set up the only cost function (also known as residual). This uses
                 // auto-differentiation to obtain the derivative (jacobian).
-                ceres::CostFunction *cost_function = ReprojectionError::Create(qualcosa);
-                problem.AddResidualBlock(cost_function, nullptr, &x);
-
-                // Run the solver!
-                ceres::Solver::Options options;
-                options.linear_solver_type = ceres::DENSE_QR;
-                options.minimizer_progress_to_stdout = true;
-                ceres::Solver::Summary summary;
-                Solve(options, &problem, &summary);
-
-                std::cout << summary.BriefReport() << "\n";
-                std::cout << "x : " << initial_x << " -> " << x << "\n";
-
+                ceres::CostFunction *cost_function = ReprojectionError::Create(
+                        observations_[i_obs * 2],
+                        observations_[i_obs * 2 + 1]);
+                problem.AddResidualBlock(cost_function, new ceres::CauchyLoss(2 * max_reproj_err_), cameraBlockPtr(
+                        cam_pose_index_[i_obs]), pointBlockPtr(point_index_[i_obs]));
 
                 /////////////////////////////////////////////////////////////////////////////////////////
 
