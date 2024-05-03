@@ -59,7 +59,7 @@ struct ReprojectionError {
     }
 
     static ceres::CostFunction *Create(const double observed_x, const double observed_y) {
-        return new ceres::AutoDiffCostFunction<ReprojectionError, 2, 6, 3>(observed_x, observed_y);
+        return new ceres::AutoDiffCostFunction<ReprojectionError, 2, 6, 3>(new ReprojectionError(observed_x, observed_y));
     }
 
 
