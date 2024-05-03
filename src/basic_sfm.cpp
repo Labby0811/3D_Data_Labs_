@@ -811,29 +811,17 @@ void BasicSfM::bundleAdjustmentIter(int new_cam_idx) {
                 // while the point position blocks have size (point_block_size_) of 3 elements.
                 //////////////////////////////////////////////////////////////////////////////////
 
-                // check initgooglelogginh
+                // TODO: check initgooglelogginh
                 // The variable to solve for with its initial value.
                 double initial_x = 5.0;
                 double x = initial_x;
 
-                // Build the problem.
-                ceres::Problem problem;
-
                 // Set up the only cost function (also known as residual). This uses
                 // auto-differentiation to obtain the derivative (jacobian).
-                ceres::CostFunction *cost_function = ReprojectionError::Create(qualcosa);
-                problem.AddResidualBlock(cost_function, nullptr, &x);
-
-                // Run the solver!
-                ceres::Solver::Options options;
-                options.linear_solver_type = ceres::DENSE_QR;
-                options.minimizer_progress_to_stdout = true;
-                ceres::Solver::Summary summary;
-                Solve(options, &problem, &summary);
-
-                std::cout << summary.BriefReport() << "\n";
-                std::cout << "x : " << initial_x << " -> " << x << "\n";
-
+                ceres::CostFunction *cost_function = ReprojectionError::Create(
+                        observations_[cam_observation_[new_cam_idx][i_obs] * 2],
+                        observations_[cam_observation_[new_cam_idx][i_obs] * 2 + 1]);
+                problem.AddResidualBlock(cost_function, new ceres::CauchyLoss(0.5), &x);
 
                 /////////////////////////////////////////////////////////////////////////////////////////
 
