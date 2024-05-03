@@ -812,16 +812,14 @@ void BasicSfM::bundleAdjustmentIter(int new_cam_idx) {
                 //////////////////////////////////////////////////////////////////////////////////
 
                 // TODO: check initgooglelogginh
-                // The variable to solve for with its initial value.
-                double initial_x = 5.0;
-                double x = initial_x;
 
                 // Set up the only cost function (also known as residual). This uses
                 // auto-differentiation to obtain the derivative (jacobian).
                 ceres::CostFunction *cost_function = ReprojectionError::Create(
                         observations_[cam_observation_[new_cam_idx][i_obs] * 2],
                         observations_[cam_observation_[new_cam_idx][i_obs] * 2 + 1]);
-                problem.AddResidualBlock(cost_function, new ceres::CauchyLoss(0.5), &x);
+                problem.AddResidualBlock(cost_function, new ceres::CauchyLoss(2 * max_reproj_err_),
+                                         cameraBlockPtr(cam_pose_index_[i_obs]), pointBlockPtr(point_index_[i_obs]));
 
                 /////////////////////////////////////////////////////////////////////////////////////////
 
