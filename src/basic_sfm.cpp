@@ -22,9 +22,49 @@ struct ReprojectionError {
     // pay attention to the order of the template parameters
     //////////////////////////////////////////////////////////////////////////////////////////
 
+    ReprojectionError(double observed_x, double observed_y) : observed_x(observed_x), observed_y(observed_y) {}
+
+    template<typename T>
+    bool operator()(const T *const camera, const T *const point, T *residuals) const {
+        // Camera parameters
+        const T &focal_length = camera[0];    // Focal length
+        const T &cx = camera[1];              // Principal point x-coordinate
+        const T &cy = camera[2];              // Principal point y-coordinate
+
+        // Extrinsic parameters (rotation and translation)
+        const T *const angle_axis = &camera[3];        // Angle-axis rotation parameters (3x1)
+        const T *const t = &camera[6];       // Translation vector (3x1)
+
+        // Point parameters
+        const T &X = point[0];  // 3D point x-coordinate
+        const T &Y = point[1];  // 3D point y-coordinate
+        const T &Z = point[2];  // 3D point z-coordinate
+
+        // Rotate and translate 3D point to camera coordinates
+        T camera_point[3];
+        ceres::AngleAxisRotatePoint(angle_axis, point, camera_point);
+        camera_point[0] += t[0];
+        camera_point[1] += t[1];
+        camera_point[2] += t[2];
+
+        // Compute projected 3D point using camera parameters
+        T projected_x = focal_length * camera_point[0] / camera_point[2] + cx;
+        T projected_y = focal_length * camera_point[1] / camera_point[2] + cy;
+
+        // Compute residuals (difference between projected and observed 2D point)
+        residuals[0] = projected_x - T(observed_x);
+        residuals[1] = projected_y - T(observed_y);
+
+        return true;
+    }
+
+    static ceres::CostFunction *Create(const double observed_x, const double observed_y) {
+        return new ceres::AutoDiffCostFunction<ReprojectionError, 2, 6, 3>(observed_x, observed_y);
+    }
 
 
-
+    double observed_x;
+    double observed_y;
 
     /////////////////////////////////////////////////////////////////////////////////////////
 };
@@ -643,8 +683,13 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
                         proj_mat1.at<double>(1, 3) = cam1_data[4];
                         proj_mat1.at<double>(2, 3) = cam1_data[5];
 
-                        cv::triangulatePoints(proj_mat0, proj_mat1, cam_observation_[new_cam_pose_idx][pt_idx],
-                                              cam_observation_[cam_idx][pt_idx], hpoints4D);
+                        points0.emplace_back(observations_[cam_observation_[new_cam_pose_idx][pt_idx] * 2],
+                                             observations_[cam_observation_[new_cam_pose_idx][pt_idx] * 2 + 1]);
+
+                        points1.emplace_back(observations_[cam_observation_[cam_idx][pt_idx] * 2],
+                                             observations_[cam_observation_[cam_idx][pt_idx] * 2 + 1]);
+
+                        cv::triangulatePoints(proj_mat0, proj_mat1, points0, points1, hpoints4D);
 
                         //check cheirality constraint
                         if (checkCheiralityConstraint(new_cam_pose_idx, pt_idx) &&
@@ -713,8 +758,6 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         // the previous camera and point positions were updated during this iteration.
         /////////////////////////////////////////////////////////////////////////////////////////
 
-
-
         // ....
         //  if( <bad reconstruction> )
         //    return false;
@@ -768,9 +811,28 @@ void BasicSfM::bundleAdjustmentIter(int new_cam_idx) {
                 // while the point position blocks have size (point_block_size_) of 3 elements.
                 //////////////////////////////////////////////////////////////////////////////////
 
+                // check initgooglelogginh
+                // The variable to solve for with its initial value.
+                double initial_x = 5.0;
+                double x = initial_x;
 
+                // Build the problem.
+                ceres::Problem problem;
 
+                // Set up the only cost function (also known as residual). This uses
+                // auto-differentiation to obtain the derivative (jacobian).
+                ceres::CostFunction *cost_function = ReprojectionError::Create(qualcosa);
+                problem.AddResidualBlock(cost_function, nullptr, &x);
 
+                // Run the solver!
+                ceres::Solver::Options options;
+                options.linear_solver_type = ceres::DENSE_QR;
+                options.minimizer_progress_to_stdout = true;
+                ceres::Solver::Summary summary;
+                Solve(options, &problem, &summary);
+
+                std::cout << summary.BriefReport() << "\n";
+                std::cout << "x : " << initial_x << " -> " << x << "\n";
 
 
                 /////////////////////////////////////////////////////////////////////////////////////////
