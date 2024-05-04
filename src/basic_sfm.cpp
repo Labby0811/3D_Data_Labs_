@@ -26,6 +26,27 @@ struct ReprojectionError {
 
     template<typename T>
     bool operator()(const T *const camera, const T *const point, T *residuals) const {
+
+        // camera[0,1,2] are the angle-axis rotation.
+        T p[3];
+        // Rotate the point using the angle-axis rotation
+        ceres::AngleAxisRotatePoint(camera, point, p);
+        
+        // camera[3,4,5] are the translation.
+        // Apply the translation to the point.
+        p[0] += camera[3]; p[1] += camera[4]; p[2] += camera[5];
+
+        // Compute projected 3D point using camera parameters (focal length = 1 because we are using normalized camera)
+        T predicted_x = p[0] / p[2];
+        T predicted_y = p[1] / p[2];
+        
+        // The error is the difference between the predicted and observed position.
+        residuals[0] = predicted_x - T(observed_x);
+        residuals[1] = predicted_y - T(observed_y);
+
+        return true;
+
+        /*OLD CODE
         // Camera parameters
         const T &focal_length = camera[0];    // Focal length
         const T &cx = camera[1];              // Principal point x-coordinate
@@ -55,7 +76,7 @@ struct ReprojectionError {
         residuals[0] = projected_x - T(observed_x);
         residuals[1] = projected_y - T(observed_y);
 
-        return true;
+        return true;*/
     }
 
     static ceres::CostFunction *Create(const double observed_x, const double observed_y) {
