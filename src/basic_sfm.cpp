@@ -513,7 +513,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
     recoverPose(E, points0, points1, intrinsics_matrix, R, t, inlier_mask_E);
 
     //Check if the recovered transformation is mainly given by a sideward motion
-    if (abs(t.at<double>(0, 0)) < abs(t.at<double>(2, 0))) //********COMMENTO******* NON SO SE METTERE ANCHE abs(t.at<double>(0,0)) < abs(t.at<double>(1,0))
+    if (abs(t.at<double>(0, 0)) < abs(t.at<double>(2, 0)))
         return false;
 
     //If the recovered transformation is mainly given by a sideward motion
@@ -662,6 +662,10 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         int n_new_pts = 0;
         std::vector<cv::Point2d> points0(1), points1(1);
         cv::Mat_<double> proj_mat0(3, 4), proj_mat1(3, 4), hpoints4D;
+        
+        //TASK 7//////////////////////
+        vector<int>points_indices;
+        /////////////////////////////////7
         for (int cam_idx = 0; cam_idx < num_cam_poses_; cam_idx++) {
             if (cam_pose_optim_iter_[cam_idx] > 0) {
                 for (auto const &co_iter: cam_observation_[cam_idx]) {
@@ -689,6 +693,11 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
                         // pt[2] = /*X coordinate of the estimated point */;
                         /////////////////////////////////////////////////////////////////////////////////////////
 
+                        //For task 7/////////////////////////////////////////////
+                        //saving the indices of 3d points seen by the new camera pose
+                        points_indices.push_back(pt_idx);
+                        //////////////////////////////////////////////////////////
+
                         //transform from axis_angle representation to rotation matrix and fill the projection matrix 0
                         cv::Vec3d axis_angle0(cam0_data[0], cam0_data[1], cam0_data[2]);
                         cv::Rodrigues(axis_angle0, proj_mat0(cv::Rect(0, 0, 3, 3)));
@@ -702,6 +711,11 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
                         proj_mat1.at<double>(0, 3) = cam1_data[3];
                         proj_mat1.at<double>(1, 3) = cam1_data[4];
                         proj_mat1.at<double>(2, 3) = cam1_data[5];
+
+
+                        /*points0(1).emplace_back(observations_[2 * co_iter.second], observations_[2 * co_iter.second + 1]);
+                        points1(0).emplace_back(observations_[2 * cam_observation_[new_cam_pose_idx][co_iter.first]],
+                                 observations_[2 * cam_observation_[new_cam_pose_idx][co_iter.first] + 1]);*/
 
                         points0.emplace_back(observations_[cam_observation_[new_cam_pose_idx][pt_idx] * 2],
                                              observations_[cam_observation_[new_cam_pose_idx][pt_idx] * 2 + 1]);
@@ -738,6 +752,35 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         for (int i = 0; i < int(cam_pose_optim_iter_.size()); i++)
             std::cout << int(cam_pose_optim_iter_[i]) << " ";
         std::cout << endl;
+
+        ////////////////////////////////////TASK 7///////////////////////////////////////
+        //Here we save the parameters before using BundleAdjustment
+
+      /*  vector<double> previous_param;
+        for ( int i = 0; i < parameters_.size(); i++)
+        {
+            previous_param.push_back(parameters_[i]);
+        }
+        */
+        //previous camera parameters
+        double* cam_i = cameraBlockPtr(new_cam_pose_idx);
+        vector<double> previous_cam_pose; 
+        for(int i = 0; i < 6; i++)
+        {
+            previous_cam_pose.push_back(cam_i[i]);
+        }
+
+        //previous point parameters
+        vector<double> previous_point_pose;
+        for(int i = 0; i < points_indices.size(); i++)
+        {
+            double* point_i = pointBlockPtr(points_indices[i]);
+            for(int j = 0; j < 3; j++)
+            {
+                previous_point_pose.push_back(point_i[j]);
+            }
+        }
+        ////////////////////////////////////////////////////////////
 
         // Execute an iteration of bundle adjustment
         bundleAdjustmentIter(new_cam_pose_idx);
@@ -778,11 +821,31 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         // the previous camera and point positions were updated during this iteration.
         /////////////////////////////////////////////////////////////////////////////////////////
 
-        // ....
-        //  if( <bad reconstruction> )
-        //    return false;
 
-        // ....
+        const int threshold = 100;
+        double* current_camera_pose = cameraBlockPtr(new_cam_pose_idx);
+        std::vector<double*> current_point_pose;
+        for (auto const &co_iter: cam_observation_[new_cam_pose_idx])
+            current_point_pose.push_back(pointBlockPtr(co_iter.first));
+
+        //finding previous pose of this camera and of its points
+        //done at line 756
+
+        //checking if the current camera pose and the current point pose have changed significantly
+        for(int i = 0; i < 6; i++)
+        {
+            if(abs(current_camera_pose[i] - previous_cam_pose[i]) > threshold)
+                return false;
+        }
+
+        for(int i = 0; i < current_point_pose.size(); i++)
+        {
+            for(int j = 0; j < 3; j++)
+            {
+                if(abs(current_point_pose[i][j] - previous_point_pose[i*3 + j]) > threshold)
+                    return false;
+            }
+        }
         
 
         /////////////////////////////////////////////////////////////////////////////////////////
