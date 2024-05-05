@@ -703,6 +703,11 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
                         proj_mat1.at<double>(1, 3) = cam1_data[4];
                         proj_mat1.at<double>(2, 3) = cam1_data[5];
 
+
+                        /*points0(1).emplace_back(observations_[2 * co_iter.second], observations_[2 * co_iter.second + 1]);
+                        points1(0).emplace_back(observations_[2 * cam_observation_[new_cam_pose_idx][co_iter.first]],
+                                 observations_[2 * cam_observation_[new_cam_pose_idx][co_iter.first] + 1]);*/
+
                         points0.emplace_back(observations_[cam_observation_[new_cam_pose_idx][pt_idx] * 2],
                                              observations_[cam_observation_[new_cam_pose_idx][pt_idx] * 2 + 1]);
 
