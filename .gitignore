@@ -3,3 +3,5 @@
 bin/*
 build/*
 CMakeLists.txt
+data1.txt
+cloud1.ply
