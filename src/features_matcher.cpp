@@ -34,24 +34,19 @@ void FeatureMatcher::extractFeatures() {
         // it into feats_colors_[i] vector
         /////////////////////////////////////////////////////////////////////////////////////////
 
-        cv::Ptr <cv::ORB> orb = cv::ORB::create();
+        cv::Ptr<cv::ORB> orb = cv::ORB::create();
 
         orb->detectAndCompute(img, cv::noArray(), features_[i], descriptors_[i]);
 
-        std::vector <cv::Vec3b> colors;
-        for (const auto &kp: features_[i]) {
-            int x = static_cast<int>(kp.pt.x);
-            int y = static_cast<int>(kp.pt.y);
-            colors.push_back(img.at<cv::Vec3b>(y, x));
-        }
-        feats_colors_[i] = colors;
+        for (const auto &kp: features_[i])
+            feats_colors_[i].push_back(img.at<cv::Vec3b>(kp.pt));
 
         /////////////////////////////////////////////////////////////////////////////////////////
     }
 }
 
 void FeatureMatcher::exhaustiveMatching() {
-    std::vector <cv::DMatch> matches, inlier_matches;
+    std::vector<cv::DMatch> matches, inlier_matches;
 
     for (int i = 0; i < images_names_.size() - 1; i++) {
         for (int j = i + 1; j < images_names_.size(); j++) {
@@ -72,11 +67,11 @@ void FeatureMatcher::exhaustiveMatching() {
             // setMatches( i, j, inlier_matches);
             /////////////////////////////////////////////////////////////////////////////////////////
 
-            std::vector <cv::DMatch> matches;
+            std::vector<cv::DMatch> matches;
             cv::BFMatcher matcher(cv::NORM_L2);
             matcher.match(descriptors_[i], descriptors_[j], matches);
 
-            std::vector <cv::Point2f> points_i, points_j;
+            std::vector<cv::Point2f> points_i, points_j;
             for (const auto &match: matches) {
                 points_i.push_back(features_[i][match.queryIdx].pt);
                 points_j.push_back(features_[j][match.trainIdx].pt);
@@ -89,9 +84,9 @@ void FeatureMatcher::exhaustiveMatching() {
             cv::Mat mask_homography;
             cv::Mat homography_matrix = cv::findHomography(points_i, points_j, cv::RANSAC, 1.0, mask_homography);
 
-            std::vector <cv::DMatch> inliers;
-            for (size_t k = 0; k < matches.size(); ++k) {
-                if (mask_essential.at<uchar>(k) && mask_homography.at<uchar>(k))
+            std::vector<cv::DMatch> inliers;
+            for (int k = 0; k < matches.size(); ++k) {
+                if (mask_essential.at<uchar>(k) == 1 && mask_homography.at<uchar>(k) == 1)
                     inliers.push_back(matches[k]);
             }
 
@@ -145,7 +140,7 @@ void FeatureMatcher::writeToFile(const std::string &filename, bool normalize_poi
 
 void FeatureMatcher::testMatches(double scale) {
     // For each pose, prepare a map that reports the pairs [point index, observation index]
-    std::vector <std::map<int, int>> cam_observation(num_poses_);
+    std::vector<std::map<int, int>> cam_observation(num_poses_);
     for (int i_obs = 0; i_obs < num_observations_; i_obs++) {
         int i_cam = pose_index_[i_obs], i_pt = point_index_[i_obs];
         cam_observation[i_cam][i_pt] = i_obs;
@@ -154,8 +149,8 @@ void FeatureMatcher::testMatches(double scale) {
     for (int r = 0; r < num_poses_; r++) {
         for (int c = r + 1; c < num_poses_; c++) {
             int num_mathces = 0;
-            std::vector <cv::DMatch> matches;
-            std::vector <cv::KeyPoint> features0, features1;
+            std::vector<cv::DMatch> matches;
+            std::vector<cv::KeyPoint> features0, features1;
             for (auto const &co_iter: cam_observation[r]) {
                 if (cam_observation[c].find(co_iter.first) != cam_observation[c].end()) {
                     features0.emplace_back(observations_[2 * co_iter.second], observations_[2 * co_iter.second + 1],
@@ -166,9 +161,8 @@ void FeatureMatcher::testMatches(double scale) {
                     num_mathces++;
                 }
             }
-            cv::Mat img0 = readUndistortedImage(images_names_[r]),
-                    img1 = readUndistortedImage(images_names_[c]),
-                    dbg_img;
+            cv::Mat img0 = readUndistortedImage(images_names_[r]), img1 = readUndistortedImage(
+                    images_names_[c]), dbg_img;
 
             cv::drawMatches(img0, features0, img1, features1, matches, dbg_img);
             cv::resize(dbg_img, dbg_img, cv::Size(), scale, scale);
@@ -179,13 +173,12 @@ void FeatureMatcher::testMatches(double scale) {
     }
 }
 
-void FeatureMatcher::setMatches(int pos0_id, int pos1_id, const std::vector <cv::DMatch> &matches) {
+void FeatureMatcher::setMatches(int pos0_id, int pos1_id, const std::vector<cv::DMatch> &matches) {
 
     const auto &features0 = features_[pos0_id];
     const auto &features1 = features_[pos1_id];
 
-    auto pos_iter0 = pose_id_map_.find(pos0_id),
-            pos_iter1 = pose_id_map_.find(pos1_id);
+    auto pos_iter0 = pose_id_map_.find(pos0_id), pos_iter1 = pose_id_map_.find(pos1_id);
 
     // Already included position?
     if (pos_iter0 == pose_id_map_.end()) {
@@ -204,10 +197,8 @@ void FeatureMatcher::setMatches(int pos0_id, int pos1_id, const std::vector <cv:
     for (auto &match: matches) {
 
         // Already included observations?
-        uint64_t obs_id0 = poseFeatPairID(pos0_id, match.queryIdx),
-                obs_id1 = poseFeatPairID(pos1_id, match.trainIdx);
-        auto pt_iter0 = point_id_map_.find(obs_id0),
-                pt_iter1 = point_id_map_.find(obs_id1);
+        uint64_t obs_id0 = poseFeatPairID(pos0_id, match.queryIdx), obs_id1 = poseFeatPairID(pos1_id, match.trainIdx);
+        auto pt_iter0 = point_id_map_.find(obs_id0), pt_iter1 = point_id_map_.find(obs_id1);
         // New point
         if (pt_iter0 == point_id_map_.end() && pt_iter1 == point_id_map_.end()) {
             int pt_idx = num_points_++;
