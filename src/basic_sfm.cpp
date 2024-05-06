@@ -664,7 +664,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         cv::Mat_<double> proj_mat0(3, 4), proj_mat1(3, 4), hpoints4D;
         
         //TASK 7//////////////////////
-        //vector<int>points_indices;
+        vector<int>points_indices;
         /////////////////////////////////7
         for (int cam_idx = 0; cam_idx < num_cam_poses_; cam_idx++) {
             if (cam_pose_optim_iter_[cam_idx] > 0) {
@@ -695,7 +695,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
 
                         //For task 7/////////////////////////////////////////////
                         //saving the indices of 3d points seen by the new camera pose
-                        //points_indices.push_back(pt_idx);
+                        points_indices.push_back(pt_idx);
                         //////////////////////////////////////////////////////////
 
                         //transform from axis_angle representation to rotation matrix and fill the projection matrix 0
@@ -756,7 +756,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         ////////////////////////////////////TASK 7///////////////////////////////////////
         //Here we save the parameters before using BundleAdjustment
         //to check if the reconstruction diverges
-/*
+
         //previous camera parameters
         double* cam_i = cameraBlockPtr(new_cam_pose_idx);
         vector<double> previous_cam_pose;
@@ -774,7 +774,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
             {
                 previous_point_pose.push_back(point_i[j]);
             }
-        }*/
+        }
         ////////////////////////////////////////////////////////////
 
         // Execute an iteration of bundle adjustment
@@ -815,15 +815,23 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         // must return false). To check if there was a divergence you could for example check how
         // the previous camera and point positions were updated during this iteration.
         /////////////////////////////////////////////////////////////////////////////////////////
-/*
 
 
-        /*const int threshold = 100;
+
+        const long threshold = 10000000000; //to find
         double* current_camera_pose = cameraBlockPtr(new_cam_pose_idx);
-        vector<double*> current_point_pose;
-        for (auto const &co_iter: cam_observation_[new_cam_pose_idx])
+        vector<double> current_point_pose;
+        for(int i = 0; i < points_indices.size(); i++)
+        {
+            double* point_i = pointBlockPtr(points_indices[i]);
+            for(int j = 0; j < 3; j++)
+            {
+                current_point_pose.push_back(point_i[j]);
+            }
+        }
+        /*for (auto const &co_iter: cam_observation_[new_cam_pose_idx])
             current_point_pose.push_back(pointBlockPtr(co_iter.first));
-
+*/
         //finding previous pose of this camera and of its points
         //done at line 756
 
@@ -838,14 +846,15 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         {
             for(int j = 0; j < 3; j++)
             {
-                if(abs(current_point_pose[i][j] - previous_point_pose[i*3 + j]) > threshold)
+                if(abs(current_point_pose[i*3 + j] - previous_point_pose[i*3 + j]) > threshold)
                     return false;
             }
         }
         
         current_point_pose.clear();
         previous_point_pose.clear();
-        previous_cam_pose.clear();*/
+        previous_cam_pose.clear();
+        points_indices.clear();
         /////////////////////////////////////////////////////////////////////////////////////////
     }
 
