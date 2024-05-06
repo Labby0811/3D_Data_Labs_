@@ -31,7 +31,7 @@ struct ReprojectionError {
         T p[3];
         // Rotate the point using the angle-axis rotation
         ceres::AngleAxisRotatePoint(camera, point, p);
-        
+
         // camera[3,4,5] are the translation.
         // Apply the translation to the point.
         p[0] += camera[3]; p[1] += camera[4]; p[2] += camera[5];
@@ -39,7 +39,7 @@ struct ReprojectionError {
         // Compute projected 3D point using camera parameters (focal length = 1 because we are using normalized camera)
         T predicted_x = p[0] / p[2];
         T predicted_y = p[1] / p[2];
-        
+
         // The error is the difference between the predicted and observed position.
         residuals[0] = predicted_x - T(observed_x);
         residuals[1] = predicted_y - T(observed_y);
@@ -664,7 +664,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         cv::Mat_<double> proj_mat0(3, 4), proj_mat1(3, 4), hpoints4D;
         
         //TASK 7//////////////////////
-        vector<int>points_indices;
+      //  vector<int>points_indices;
         /////////////////////////////////7
         for (int cam_idx = 0; cam_idx < num_cam_poses_; cam_idx++) {
             if (cam_pose_optim_iter_[cam_idx] > 0) {
@@ -695,7 +695,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
 
                         //For task 7/////////////////////////////////////////////
                         //saving the indices of 3d points seen by the new camera pose
-                        points_indices.push_back(pt_idx);
+                      //  points_indices.push_back(pt_idx);
                         //////////////////////////////////////////////////////////
 
                         //transform from axis_angle representation to rotation matrix and fill the projection matrix 0
@@ -755,13 +755,8 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
 
         ////////////////////////////////////TASK 7///////////////////////////////////////
         //Here we save the parameters before using BundleAdjustment
-
-      /*  vector<double> previous_param;
-        for ( int i = 0; i < parameters_.size(); i++)
-        {
-            previous_param.push_back(parameters_[i]);
-        }
-        */
+        //to check if the reconstruction diverges
+/*
         //previous camera parameters
         double* cam_i = cameraBlockPtr(new_cam_pose_idx);
         vector<double> previous_cam_pose; 
@@ -779,7 +774,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
             {
                 previous_point_pose.push_back(point_i[j]);
             }
-        }
+        }*/
         ////////////////////////////////////////////////////////////
 
         // Execute an iteration of bundle adjustment
@@ -820,11 +815,11 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         // must return false). To check if there was a divergence you could for example check how
         // the previous camera and point positions were updated during this iteration.
         /////////////////////////////////////////////////////////////////////////////////////////
-
+/*
 
         const int threshold = 100;
         double* current_camera_pose = cameraBlockPtr(new_cam_pose_idx);
-        std::vector<double*> current_point_pose;
+        vector<double*> current_point_pose;
         for (auto const &co_iter: cam_observation_[new_cam_pose_idx])
             current_point_pose.push_back(pointBlockPtr(co_iter.first));
 
@@ -847,7 +842,9 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
             }
         }
         
-
+        current_point_pose.clear();
+        previous_point_pose.clear();
+        previous_cam_pose.clear();*/
         /////////////////////////////////////////////////////////////////////////////////////////
     }
 
