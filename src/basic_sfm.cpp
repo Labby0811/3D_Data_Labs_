@@ -664,7 +664,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         cv::Mat_<double> proj_mat0(3, 4), proj_mat1(3, 4), hpoints4D;
         
         //TASK 7//////////////////////
-      //  vector<int>points_indices;
+        //vector<int>points_indices;
         /////////////////////////////////7
         for (int cam_idx = 0; cam_idx < num_cam_poses_; cam_idx++) {
             if (cam_pose_optim_iter_[cam_idx] > 0) {
@@ -695,7 +695,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
 
                         //For task 7/////////////////////////////////////////////
                         //saving the indices of 3d points seen by the new camera pose
-                      //  points_indices.push_back(pt_idx);
+                        //points_indices.push_back(pt_idx);
                         //////////////////////////////////////////////////////////
 
                         //transform from axis_angle representation to rotation matrix and fill the projection matrix 0
@@ -759,7 +759,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
 /*
         //previous camera parameters
         double* cam_i = cameraBlockPtr(new_cam_pose_idx);
-        vector<double> previous_cam_pose; 
+        vector<double> previous_cam_pose;
         for(int i = 0; i < 6; i++)
         {
             previous_cam_pose.push_back(cam_i[i]);
@@ -817,7 +817,8 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         /////////////////////////////////////////////////////////////////////////////////////////
 /*
 
-        const int threshold = 100;
+
+        /*const int threshold = 100;
         double* current_camera_pose = cameraBlockPtr(new_cam_pose_idx);
         vector<double*> current_point_pose;
         for (auto const &co_iter: cam_observation_[new_cam_pose_idx])
