@@ -38,6 +38,11 @@ void FeatureMatcher::extractFeatures() {
 
         orb->detectAndCompute(img, cv::noArray(), features_[i], descriptors_[i]);
 
+        /*cv::Ptr<cv::SIFT> sift = cv::SIFT::create();
+
+        sift->detectAndCompute(img, cv::noArray(), features_[i], descriptors_[i]);*/
+
+
         for (const auto &kp: features_[i])
             feats_colors_[i].push_back(img.at<cv::Vec3b>(kp.pt));
 
@@ -79,22 +84,20 @@ void FeatureMatcher::exhaustiveMatching() {
 
             cv::Mat mask_essential;
             cv::Mat essential_matrix = cv::findEssentialMat(points_i, points_j, new_intrinsics_matrix_, cv::RANSAC,
-                                                            0.999, 1.0, mask_essential);
+                                                            0.99, 0.7, mask_essential);
 
             cv::Mat mask_homography;
-            cv::Mat homography_matrix = cv::findHomography(points_i, points_j, cv::RANSAC, 1.0, mask_homography);
+            cv::Mat homography_matrix = cv::findHomography(points_i, points_j, cv::RANSAC, 0.7, mask_homography);
 
             std::vector<cv::DMatch> inliers;
             for (int k = 0; k < matches.size(); ++k) {
-                if (mask_essential.at<uchar>(k) == 1 && mask_homography.at<uchar>(k) == 1)
+                if (mask_essential.at<uchar>(k) == 1 || mask_homography.at<uchar>(k) == 1)
                     inliers.push_back(matches[k]);
             }
 
             if (inliers.size() > 5)
                 setMatches(i, j, inliers);
 
-            inliers.clear();
-            matches.clear();
             /////////////////////////////////////////////////////////////////////////////////////////
 
         }
