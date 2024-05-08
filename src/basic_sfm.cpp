@@ -48,37 +48,6 @@ struct ReprojectionError {
 
         return true;
 
-        /*OLD CODE
-        // Camera parameters
-        const T &focal_length = camera[0];    // Focal length
-        const T &cx = camera[1];              // Principal point x-coordinate
-        const T &cy = camera[2];              // Principal point y-coordinate
-
-        // Extrinsic parameters (rotation and translation)
-        const T *const angle_axis = &camera[3];        // Angle-axis rotation parameters (3x1)
-        const T *const t = &camera[6];       // Translation vector (3x1)
-
-        // Point parameters
-        const T &X = point[0];  // 3D point x-coordinate
-        const T &Y = point[1];  // 3D point y-coordinate
-        const T &Z = point[2];  // 3D point z-coordinate
-
-        // Rotate and translate 3D point to camera coordinates
-        T camera_point[3];
-        ceres::AngleAxisRotatePoint(angle_axis, point, camera_point);
-        camera_point[0] += t[0];
-        camera_point[1] += t[1];
-        camera_point[2] += t[2];
-
-        // Compute projected 3D point using camera parameters
-        T projected_x = focal_length * camera_point[0] / camera_point[2] + cx;
-        T projected_y = focal_length * camera_point[1] / camera_point[2] + cy;
-
-        // Compute residuals (difference between projected and observed 2D point)
-        residuals[0] = projected_x - T(observed_x);
-        residuals[1] = projected_y - T(observed_y);
-
-        return true;*/
     }
 
     static ceres::CostFunction *Create(const double observed_x, const double observed_y) {
@@ -504,7 +473,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
     /////////////////////////////////////////////////////////////////////////////////////////
 
     //finding inliers in E and H
-    const double threshold = 2.5;
+    const double threshold = 0.001;
     cv::Mat E = findEssentialMat(points0, points1, intrinsics_matrix, cv::RANSAC, 0.999, threshold, inlier_mask_E);
     cv::Mat H = findHomography(points0, points1, cv::RANSAC, threshold, inlier_mask_H);
 
@@ -519,7 +488,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
     recoverPose(E, points0, points1, intrinsics_matrix, R, t, inlier_mask_E);
 
     //Check if the recovered transformation is mainly given by a sideward motion
-    if (abs(t.at<double>(0)) < abs(t.at<double>(2))) {
+    if (fabs(t.at<double>(0, 0)) < fabs(t.at<double>(2, 0))) {
         cout << "Forward motion\n";
         return false;
     }
@@ -603,6 +572,10 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
 
     // First bundle adjustment iteration: here we have only two camera poses, i.e., the seed pair
     bundleAdjustmentIter(new_cam_pose_idx);
+    
+    //////task7////////////////////////
+    double BB_dist = 0.0;
+    /////////////////////////////////
 
     // Start to register new poses and observations...
     for (int iter = 1; iter < num_cam_poses_ - 1; iter++) {
@@ -774,10 +747,10 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
                             pt[1] = hpoints4D.at<double>(1, 0) / hpoints4D.at<double>(3, 0);
                             pt[2] = hpoints4D.at<double>(2, 0) / hpoints4D.at<double>(3, 0);
                         }
-*/
+
                         points0.clear();
                         points1.clear();
-
+*/
                         /////////////////////////////////////////////////////////////////////////////////////////
 
                     }
@@ -840,6 +813,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
                 (fabs(pts[i * point_block_size_]) > max_dist || fabs(pts[i * point_block_size_ + 1]) > max_dist ||
                  fabs(pts[i * point_block_size_ + 2]) > max_dist)) {
                 pts_optim_iter_[i] = -1;
+                //count_rejected_points_++;
             }
         }
         //////////////////////////// Code to be completed (7/7) //////////////////////////////////
@@ -852,8 +826,31 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         // the previous camera and point positions were updated during this iteration.
         /////////////////////////////////////////////////////////////////////////////////////////
 
+        //creating a bounding box to check if the reconstruction diverges
+        //finding the limits of the bounding box
+        Eigen::Vector3d BB_vol_min = Eigen::Vector3d::Constant((std::numeric_limits<double>::max())),
+                        BB_vol_max = Eigen::Vector3d::Constant((-std::numeric_limits<double>::max()));
+        
+        for (int i = 0; i < num_points_; i++) {
+            if (pts_optim_iter_[i] > 0) {
+                double *point_i = pointBlockPtr(i);
+                for (int j = 0; j < 3; j++) {
+                    if (point_i[j] > BB_vol_max(j)) BB_vol_max(j) = point_i[j];
+                    if (point_i[j] < BB_vol_min(j)) BB_vol_min(j) = point_i[j];
+                }
+            }
+        }
+
+        //finding the maximum distance between the limits of the bounding box
+        BB_dist = (BB_vol_max - BB_vol_min).norm();
 
 /*
+      if(count_rejected_points_ > 50)
+        {
+            std::cout << "!!!!!!!Point rejected" << std::endl;
+            return false;
+        }
+
         const double threshold_cam = 3.0; //to find
         const double threshold_points = 9.0; //to find
         int count_points = 0;
@@ -924,6 +921,28 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         points_indices.clear();
         /////////////////////////////////////////////////////////////////////////////////////////
     }
+
+    // Finding the BB after final bundle adjustment iteration
+    Eigen::Vector3d BB_final_vol_min = Eigen::Vector3d::Constant((std::numeric_limits<double>::max())),
+                        BB_final_vol_max = Eigen::Vector3d::Constant((-std::numeric_limits<double>::max()));
+        
+    for (int i = 0; i < num_points_; i++) {
+        if (pts_optim_iter_[i] > 0) {
+            double *point_i = pointBlockPtr(i);
+            for (int j = 0; j < 3; j++) {
+                if (point_i[j] > BB_final_vol_max(j)) BB_final_vol_max(j) = point_i[j];
+                if (point_i[j] < BB_final_vol_min(j)) BB_final_vol_min(j) = point_i[j];
+            }
+        }
+    }
+
+    //finding the maximum distance between the limits of the bounding box  
+    double BB_final_dist = (BB_final_vol_max - BB_final_vol_min).norm();
+    if (BB_final_dist > BB_dist) {
+        std::cout << "The reconstruction diverged" << std::endl;
+        return false;
+    }
+
 
     return true;
 
