@@ -23,6 +23,8 @@ void FeatureMatcher::extractFeatures() {
     descriptors_.resize(images_names_.size());
     feats_colors_.resize(images_names_.size());
 
+    cv::Ptr<cv::ORB> orb = cv::ORB::create(2000);
+
     for (int i = 0; i < images_names_.size(); i++) {
         std::cout << "Computing descriptors for image " << i << std::endl;
         cv::Mat img = readUndistortedImage(images_names_[i]);
@@ -34,17 +36,10 @@ void FeatureMatcher::extractFeatures() {
         // it into feats_colors_[i] vector
         /////////////////////////////////////////////////////////////////////////////////////////
 
-        cv::Ptr<cv::ORB> orb = cv::ORB::create();
-
         orb->detectAndCompute(img, cv::noArray(), features_[i], descriptors_[i]);
 
-        /*cv::Ptr<cv::SIFT> sift = cv::SIFT::create();
-
-        sift->detectAndCompute(img, cv::noArray(), features_[i], descriptors_[i]);*/
-
-
         for (const auto &kp: features_[i])
-            feats_colors_[i].push_back(img.at<cv::Vec3b>(kp.pt));
+            feats_colors_[i].push_back(img.at<cv::Vec3b>(kp.pt.y, kp.pt.x));
 
         /////////////////////////////////////////////////////////////////////////////////////////
     }
@@ -72,31 +67,35 @@ void FeatureMatcher::exhaustiveMatching() {
             // setMatches( i, j, inlier_matches);
             /////////////////////////////////////////////////////////////////////////////////////////
 
-            std::vector<cv::DMatch> matches;
-            cv::BFMatcher matcher(cv::NORM_L2);
-            matcher.match(descriptors_[i], descriptors_[j], matches);
+            std::vector<std::vector<cv::DMatch>> knn_matches;
 
+            cv::BFMatcher matcher(cv::NORM_HAMMING);
+            matcher.knnMatch(descriptors_[i], descriptors_[j], knn_matches, 2);
+
+            const float ratio_thresh = 0.7f;
             std::vector<cv::Point2f> points_i, points_j;
-            for (const auto &match: matches) {
-                points_i.push_back(features_[i][match.queryIdx].pt);
-                points_j.push_back(features_[j][match.trainIdx].pt);
+            for (const auto &m: knn_matches) {
+                if (m[0].distance < ratio_thresh * m[1].distance) {
+                    matches.push_back(m[0]);
+                    points_i.push_back(features_[i][m[0].queryIdx].pt);
+                    points_j.push_back(features_[j][m[0].trainIdx].pt);
+                }
             }
 
-            cv::Mat mask_essential;
-            cv::Mat essential_matrix = cv::findEssentialMat(points_i, points_j, new_intrinsics_matrix_, cv::RANSAC,
-                                                            0.99, 0.7, mask_essential);
+            const double threshold = 1.0;
+            cv::Mat mask_essential, mask_homography;
+            cv::findEssentialMat(points_i, points_j, new_intrinsics_matrix_, cv::RANSAC, 0.999, threshold,
+                                 mask_essential);
+            cv::findHomography(points_i, points_j, cv::RANSAC, threshold, mask_homography);
 
-            cv::Mat mask_homography;
-            cv::Mat homography_matrix = cv::findHomography(points_i, points_j, cv::RANSAC, 0.7, mask_homography);
 
-            std::vector<cv::DMatch> inliers;
             for (int k = 0; k < matches.size(); ++k) {
-                if (mask_essential.at<uchar>(k) == 1 || mask_homography.at<uchar>(k) == 1)
-                    inliers.push_back(matches[k]);
+                if (mask_essential.at<uchar>(k) || mask_homography.at<uchar>(k))
+                    inlier_matches.push_back(matches[k]);
             }
 
-            if (inliers.size() > 5)
-                setMatches(i, j, inliers);
+            if (inlier_matches.size() > 5)
+                setMatches(i, j, inlier_matches);
 
             /////////////////////////////////////////////////////////////////////////////////////////
 
