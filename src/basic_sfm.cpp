@@ -528,7 +528,6 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
     R.copyTo(init_r_mat);
     t.copyTo(init_t_vec);
 
-
     /////////////////////////////////////////////////////////////////////////////////////////
 
     int ref_cam_pose_idx = seed_pair_idx0, new_cam_pose_idx = seed_pair_idx1;
@@ -740,8 +739,8 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
                             pt[0] = hpoints4D.at<double>(0) / hpoints4D.at<double>(3);
                             pt[1] = hpoints4D.at<double>(1) / hpoints4D.at<double>(3);
                             pt[2] = hpoints4D.at<double>(2) / hpoints4D.at<double>(3);
-                        }*/
-
+                        }
+*/
                         // get 2d points
                         points0.emplace_back(observations_[cam_observation_[new_cam_pose_idx][pt_idx] * 2],
                                              observations_[cam_observation_[new_cam_pose_idx][pt_idx] * 2 + 1]);
@@ -778,7 +777,6 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
 
                         points0.clear();
                         points1.clear();
-
 
                         /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -855,10 +853,12 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         /////////////////////////////////////////////////////////////////////////////////////////
 
 
-
-
-        /*const long threshold = 10000000000; //to find
-        double* current_camera_pose = cameraBlockPtr(new_cam_pose_idx);
+/*
+        const double threshold_cam = 3.0; //to find
+        const double threshold_points = 9.0; //to find
+        int count_points = 0;
+        const int count_points_threshold = 5;   
+        double* current_camera_pose = cameraBlockPtr(new_cam_pose_idx) + 3;
         vector<double> current_point_pose;
         for(int i = 0; i < points_indices.size(); i++)
         {
@@ -873,27 +873,55 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
 
         //finding previous pose of this camera and of its points
         //done at line 756
-
+     /*    std::cout << "Checking if the reconstruction diverges" << std::endl;
         //checking if the current camera pose and the current point pose have changed significantly
-        /*for(int i = 0; i < 6; i++)
+       for(int i = 0; i < 6; i++)
         {
-            if(abs(current_camera_pose[i] - previous_cam_pose[i]) > threshold)
+            std::cout << "Camera pose: " << current_camera_pose[i] << " " << previous_cam_pose[i] << std::endl;
+            if(abs(current_camera_pose[i] - previous_cam_pose[i]) > threshold_cam)
+            {
+                std::cout << "Camera pose diverged" << std::endl;
                 return false;
+            }
+        }*/
+     /*   if(sqrt(pow(current_camera_pose[0] - previous_cam_pose[0],2) + pow(current_camera_pose[1] - previous_cam_pose[1], 2) + pow(current_camera_pose[2] - previous_cam_pose[2],2)) > threshold_cam)
+        {
+            std::cout << "Camera pose diverged" << std::endl;
+            return false;
         }
 
         for(int i = 0; i < current_point_pose.size(); i++)
         {
-            for(int j = 0; j < 3; j++)
+           /* for(int j = 0; j < 3; j++)
             {
-                if(abs(current_point_pose[i*3 + j] - previous_point_pose[i*3 + j]) > threshold)
+                std::cout << "Point pose: " << current_point_pose[i*3 + j] << " " << previous_point_pose[i*3 + j] << std::endl;
+                if(abs(current_point_pose[i*3 + j] - previous_point_pose[i*3 + j]) > threshold_points)
+                {
+                    std::cout << "Point pose diverged" << std::endl;
+                    count_points++;
+                    if(count_points > count_points_threshold)
+                    {
+                        std::cout << "!!!!!!!Point pose diverged" << std::endl;
+                        return false;
+                    }
+                }
+            }*/
+         /*   if(sqrt(pow(current_point_pose[i*3 + 0] - previous_point_pose[i*3 + 0],2) + pow(current_point_pose[i*3 + 1] - previous_point_pose[i*3 + 1], 2) + pow(current_point_pose[i*3 + 2] - previous_point_pose[i*3 + 2],2)) > threshold_points)
+            {
+                std::cout << "points pose diverged" << std::endl;
+                count_points++;
+                if(count_points > count_points_threshold)
+                {
+                    std::cout << "!!!!!!!Point pose diverged" << std::endl;
                     return false;
+                }
             }
         }
-
-        current_point_pose.clear();
+       
+        current_point_pose.clear();*/ 
         previous_point_pose.clear();
         previous_cam_pose.clear();
-        points_indices.clear();*/
+        points_indices.clear();
         /////////////////////////////////////////////////////////////////////////////////////////
     }
 
