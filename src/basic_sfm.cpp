@@ -34,7 +34,9 @@ struct ReprojectionError {
 
         // camera[3,4,5] are the translation.
         // Apply the translation to the point.
-        p[0] += camera[3]; p[1] += camera[4]; p[2] += camera[5];
+        p[0] += camera[3];
+        p[1] += camera[4];
+        p[2] += camera[5];
 
         // Compute projected 3D point using camera parameters (focal length = 1 because we are using normalized camera)
         T predicted_x = p[0] / p[2];
@@ -80,7 +82,8 @@ struct ReprojectionError {
     }
 
     static ceres::CostFunction *Create(const double observed_x, const double observed_y) {
-        return (new ceres::AutoDiffCostFunction<ReprojectionError,2,6,3>(new ReprojectionError(observed_x,observed_y)));
+        return (new ceres::AutoDiffCostFunction<ReprojectionError, 2, 6, 3>(
+                new ReprojectionError(observed_x, observed_y)));
     }
 
 
@@ -501,20 +504,25 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
     /////////////////////////////////////////////////////////////////////////////////////////
 
     //finding inliers in E and H
-    cv::Mat E = findEssentialMat(points0, points1, intrinsics_matrix, cv::RANSAC, 0.999, 0.001, inlier_mask_E);
-    cv::Mat H = findHomography(points0, points1, cv::RANSAC, 0.001, inlier_mask_H);
+    const double threshold = 2.5;
+    cv::Mat E = findEssentialMat(points0, points1, intrinsics_matrix, cv::RANSAC, 0.999, threshold, inlier_mask_E);
+    cv::Mat H = findHomography(points0, points1, cv::RANSAC, threshold, inlier_mask_H);
 
     //check if inliers in H are more than inliers in E
-    if (countNonZero(inlier_mask_H) >= countNonZero(inlier_mask_E))
+    if (countNonZero(inlier_mask_H) >= countNonZero(inlier_mask_E)) {
+        cout << "The number of inliers of H are more than E\n";
         return false;
+    }
 
     //If inliers in E are more than inliers in H
     cv::Mat R, t;
     recoverPose(E, points0, points1, intrinsics_matrix, R, t, inlier_mask_E);
 
     //Check if the recovered transformation is mainly given by a sideward motion
-    if (abs(t.at<double>(0, 0)) < abs(t.at<double>(2, 0)))
+    if (abs(t.at<double>(0)) < abs(t.at<double>(2))) {
+        cout << "Forward motion\n";
         return false;
+    }
 
     //If the recovered transformation is mainly given by a sideward motion
     R.copyTo(init_r_mat);
@@ -661,9 +669,9 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         int n_new_pts = 0;
         std::vector<cv::Point2d> points0(1), points1(1);
         cv::Mat_<double> proj_mat0(3, 4), proj_mat1(3, 4), hpoints4D;
-        
+
         //TASK 7//////////////////////
-        vector<int>points_indices;
+        vector<int> points_indices;
         /////////////////////////////////7
         for (int cam_idx = 0; cam_idx < num_cam_poses_; cam_idx++) {
             if (cam_pose_optim_iter_[cam_idx] > 0) {
@@ -712,10 +720,6 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
                         proj_mat1.at<double>(2, 3) = cam1_data[5];
 
 
-                        /*points0(1).emplace_back(observations_[2 * co_iter.second], observations_[2 * co_iter.second + 1]);
-                        points1(0).emplace_back(observations_[2 * cam_observation_[new_cam_pose_idx][co_iter.first]],
-                                 observations_[2 * cam_observation_[new_cam_pose_idx][co_iter.first] + 1]);*/
-
                         points0.emplace_back(observations_[cam_observation_[new_cam_pose_idx][pt_idx] * 2],
                                              observations_[cam_observation_[new_cam_pose_idx][pt_idx] * 2 + 1]);
 
@@ -726,7 +730,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
 
                         //check cheirality constraint
                         if (checkCheiralityConstraint(new_cam_pose_idx, pt_idx) &&
-                            checkCheiralityConstraint(cam_idx, pt_idx)) {
+                            checkCheiralityConstraint(cam_idx, pt_idx)) { // OCCHIO : it seems wrong
                             n_new_pts++;
                             pts_optim_iter_[pt_idx] = 1;
                             double *pt = pointBlockPtr(pt_idx);
@@ -737,6 +741,40 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
                             pt[2] = hpoints4D.at<double>(2) / hpoints4D.at<double>(3);
                         }
 
+                        // get 2d points
+                        /*points0.emplace_back(observations_[cam_observation_[new_cam_pose_idx][pt_idx] * 2],
+                                             observations_[cam_observation_[new_cam_pose_idx][pt_idx] * 2 + 1]);
+                        points1.emplace_back(observations_[cam_observation_[cam_idx][pt_idx] * 2],
+                                             observations_[cam_observation_[cam_idx][pt_idx] * 2 + 1]);
+
+                        // define projection matrix of new cam pose
+                        cv::Mat_<double> axis_angle = (cv::Mat_<double>(3, 1)
+                                << cam0_data[0], cam0_data[1], cam0_data[2]);
+                        cv::Mat_<double> t = (cv::Mat_<double>(3, 1) << cam0_data[3], cam0_data[4], cam0_data[5]);
+                        cv::Mat_<double> R(3, 3);
+                        cv::Rodrigues(axis_angle, R);
+                        cv::hconcat(R, t, proj_mat0);
+
+                        // define projection matrix of cam pose
+                        axis_angle = (cv::Mat_<double>(3, 1) << cam1_data[0], cam1_data[1], cam1_data[2]);
+                        t = (cv::Mat_<double>(3, 1) << cam1_data[3], cam1_data[4], cam1_data[5]);
+                        cv::Rodrigues(axis_angle, R);
+                        cv::hconcat(R, t, proj_mat1);
+
+                        cv::triangulatePoints(proj_mat0, proj_mat1, points0, points1, hpoints4D);
+
+                        // check cheirality constraint
+                        if (hpoints4D.at<double>(2, 0) / hpoints4D.at<double>(3, 0) > 0.0) {
+                            n_new_pts++;
+                            pts_optim_iter_[pt_idx] = 1;
+                            double *pt = pointBlockPtr(pt_idx);
+
+                            // convert from homogenous coordinates
+                            pt[0] = hpoints4D.at<double>(0, 0) / hpoints4D.at<double>(3, 0);
+                            pt[1] = hpoints4D.at<double>(1, 0) / hpoints4D.at<double>(3, 0);
+                            pt[2] = hpoints4D.at<double>(2, 0) / hpoints4D.at<double>(3, 0);
+                        }
+*/
                         points0.clear();
                         points1.clear();
 
@@ -759,20 +797,17 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         //to check if the reconstruction diverges
 
         //previous camera parameters
-        double* cam_i = cameraBlockPtr(new_cam_pose_idx) + 3;
+        double *cam_i = cameraBlockPtr(new_cam_pose_idx);
         vector<double> previous_cam_pose;
-        for(int i = 0; i < 3; i++)
-        {
+        for (int i = 0; i < 6; i++) {
             previous_cam_pose.push_back(cam_i[i]);
         }
 
         //previous point parameters
         vector<double> previous_point_pose;
-        for(int i = 0; i < points_indices.size(); i++)
-        {
-            double* point_i = pointBlockPtr(points_indices[i]);
-            for(int j = 0; j < 3; j++)
-            {
+        for (int i = 0; i < points_indices.size(); i++) {
+            double *point_i = pointBlockPtr(points_indices[i]);
+            for (int j = 0; j < 3; j++) {
                 previous_point_pose.push_back(point_i[j]);
             }
         }
@@ -832,7 +867,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
             {
                 current_point_pose.push_back(point_i[j]);
             }
-        }
+        }*/
         /*for (auto const &co_iter: cam_observation_[new_cam_pose_idx])
             current_point_pose.push_back(pointBlockPtr(co_iter.first));*/
 
@@ -940,11 +975,10 @@ void BasicSfM::bundleAdjustmentIter(int new_cam_idx) {
 
                 // Set up the only cost function (also known as residual). This uses
                 // auto-differentiation to obtain the derivative (jacobian).
-                ceres::CostFunction *cost_function = ReprojectionError::Create(
-                        observations_[i_obs * 2],
-                        observations_[i_obs * 2 + 1]);
-                problem.AddResidualBlock(cost_function, new ceres::CauchyLoss(2 * max_reproj_err_), cameraBlockPtr(
-                        cam_pose_index_[i_obs]), pointBlockPtr(point_index_[i_obs]));
+                ceres::CostFunction *cost_function = ReprojectionError::Create(observations_[i_obs * 2],
+                                                                               observations_[i_obs * 2 + 1]);
+                problem.AddResidualBlock(cost_function, new ceres::CauchyLoss(2 * max_reproj_err_),
+                                         cameraBlockPtr(cam_pose_index_[i_obs]), pointBlockPtr(point_index_[i_obs]));
 
                 /////////////////////////////////////////////////////////////////////////////////////////
 
