@@ -23,7 +23,13 @@ void FeatureMatcher::extractFeatures() {
     descriptors_.resize(images_names_.size());
     feats_colors_.resize(images_names_.size());
 
-    cv::Ptr<cv::ORB> orb = cv::ORB::create(2000);
+    cv::Ptr<cv::ORB> orb = cv::ORB::create(5000);
+    cv::Ptr<cv::AKAZE> akaze = cv::AKAZE::create();
+    akaze->setThreshold(0.0008);
+    akaze->setNOctaves(12);
+    akaze->setNOctaveLayers(8);
+    cv::Ptr<cv::BRISK> brisk = cv::BRISK::create(60, 4, 1.5);
+
 
     for (int i = 0; i < images_names_.size(); i++) {
         std::cout << "Computing descriptors for image " << i << std::endl;
@@ -69,7 +75,7 @@ void FeatureMatcher::exhaustiveMatching() {
 
             std::vector<std::vector<cv::DMatch>> knn_matches;
 
-            cv::BFMatcher matcher(cv::NORM_HAMMING);
+            cv::BFMatcher matcher(cv::NORM_L2);
             matcher.knnMatch(descriptors_[i], descriptors_[j], knn_matches, 2);
 
             const float ratio_thresh = 0.7f;
@@ -82,7 +88,7 @@ void FeatureMatcher::exhaustiveMatching() {
                 }
             }
 
-            const double threshold = 1.0;
+            const double threshold = 1.2;
             cv::Mat mask_essential, mask_homography;
             cv::findEssentialMat(points_i, points_j, new_intrinsics_matrix_, cv::RANSAC, 0.999, threshold,
                                  mask_essential);
