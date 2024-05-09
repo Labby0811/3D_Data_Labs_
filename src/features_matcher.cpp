@@ -23,12 +23,13 @@ void FeatureMatcher::extractFeatures() {
     descriptors_.resize(images_names_.size());
     feats_colors_.resize(images_names_.size());
 
-    cv::Ptr<cv::ORB> orb = cv::ORB::create(5000);
+    cv::Ptr<cv::ORB> orb = cv::ORB::create(10000);//, 1.2, 8, 31, 0, 4);
     cv::Ptr<cv::AKAZE> akaze = cv::AKAZE::create();
-    akaze->setThreshold(0.0008);
-    akaze->setNOctaves(12);
-    akaze->setNOctaveLayers(8);
+    akaze->setThreshold(0.0001);
+    akaze->setNOctaves(8);
+    akaze->setNOctaveLayers(6);
     cv::Ptr<cv::BRISK> brisk = cv::BRISK::create(60, 4, 1.5);
+    cv::Ptr<cv::KAZE> kaze = cv::KAZE::create(true, false, 0.0005, 8, 4);
 
 
     for (int i = 0; i < images_names_.size(); i++) {
@@ -42,7 +43,7 @@ void FeatureMatcher::extractFeatures() {
         // it into feats_colors_[i] vector
         /////////////////////////////////////////////////////////////////////////////////////////
 
-        orb->detectAndCompute(img, cv::noArray(), features_[i], descriptors_[i]);
+        akaze->detectAndCompute(img, cv::noArray(), features_[i], descriptors_[i]);
 
         for (const auto &kp: features_[i])
             feats_colors_[i].push_back(img.at<cv::Vec3b>(kp.pt.y, kp.pt.x));
@@ -78,7 +79,7 @@ void FeatureMatcher::exhaustiveMatching() {
             cv::BFMatcher matcher(cv::NORM_L2);
             matcher.knnMatch(descriptors_[i], descriptors_[j], knn_matches, 2);
 
-            const float ratio_thresh = 0.7f;
+            const float ratio_thresh = 0.8f;
             std::vector<cv::Point2f> points_i, points_j;
             for (const auto &m: knn_matches) {
                 if (m[0].distance < ratio_thresh * m[1].distance) {
@@ -88,7 +89,17 @@ void FeatureMatcher::exhaustiveMatching() {
                 }
             }
 
-            const double threshold = 1.2;
+            /*cv::BFMatcher matcher(cv::NORM_L2);
+            matcher.match(descriptors_[i], descriptors_[j], matches);
+
+            std::vector<cv::Point2f> points_i, points_j;
+            for (const auto &match: matches) {
+                points_i.push_back(features_[i][match.queryIdx].pt);
+                points_j.push_back(features_[j][match.trainIdx].pt);
+            }*/
+
+
+            const double threshold = 0.7;
             cv::Mat mask_essential, mask_homography;
             cv::findEssentialMat(points_i, points_j, new_intrinsics_matrix_, cv::RANSAC, 0.999, threshold,
                                  mask_essential);
@@ -102,6 +113,9 @@ void FeatureMatcher::exhaustiveMatching() {
 
             if (inlier_matches.size() > 5)
                 setMatches(i, j, inlier_matches);
+
+            matches.clear();
+            inlier_matches.clear();
 
             /////////////////////////////////////////////////////////////////////////////////////////
 
