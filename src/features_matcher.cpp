@@ -23,13 +23,15 @@ void FeatureMatcher::extractFeatures() {
     descriptors_.resize(images_names_.size());
     feats_colors_.resize(images_names_.size());
 
-    cv::Ptr <cv::ORB> orb = cv::ORB::create(10000, 1.2, 8);
-    cv::Ptr <cv::AKAZE> akaze = cv::AKAZE::create();
+    // create feature extractor
+    cv::Ptr<cv::AKAZE> akaze = cv::AKAZE::create();
     akaze->setThreshold(0.0001);
     akaze->setNOctaves(8);
     akaze->setNOctaveLayers(6);
-    cv::Ptr <cv::BRISK> brisk = cv::BRISK::create(60, 4, 1.5);
-    cv::Ptr <cv::KAZE> kaze = cv::KAZE::create(true, false, 0.0005, 8, 4);
+
+    // cv::Ptr <cv::ORB> orb = cv::ORB::create(10000, 1.2, 8);
+    // cv::Ptr <cv::BRISK> brisk = cv::BRISK::create(60, 4, 1.5);
+    // cv::Ptr <cv::KAZE> kaze = cv::KAZE::create(true, false, 0.0005, 8, 4);
 
 
     for (int i = 0; i < images_names_.size(); i++) {
@@ -43,8 +45,10 @@ void FeatureMatcher::extractFeatures() {
         // it into feats_colors_[i] vector
         /////////////////////////////////////////////////////////////////////////////////////////
 
+        // detect features
         akaze->detectAndCompute(img, cv::noArray(), features_[i], descriptors_[i]);
 
+        // store colors
         for (const auto &kp: features_[i])
             feats_colors_[i].push_back(img.at<cv::Vec3b>((int) kp.pt.y, (int) kp.pt.x));
 
@@ -76,28 +80,19 @@ void FeatureMatcher::exhaustiveMatching() {
 
             std::vector<std::vector<cv::DMatch>> knn_matches;
 
+            // create matcher
             cv::BFMatcher matcher(cv::NORM_HAMMING);
-            matcher.knnMatch(descriptors_[i], descriptors_[j], knn_matches, 2);
+            matcher.knnMatch(descriptors_[i], descriptors_[j], knn_matches, 2); // match using clustering
 
             const float ratio_threshold = 0.8f;
             std::vector<cv::Point2f> points_i, points_j;
             for (const auto &m: knn_matches) {
-                if (m[0].distance < ratio_threshold * m[1].distance) {
+                if (m[0].distance < ratio_threshold * m[1].distance) { // store match and keypoints
                     matches.push_back(m[0]);
                     points_i.push_back(features_[i][m[0].queryIdx].pt);
                     points_j.push_back(features_[j][m[0].trainIdx].pt);
                 }
             }
-
-            /*cv::BFMatcher matcher(cv::NORM_L2);
-            matcher.match(descriptors_[i], descriptors_[j], matches);
-
-            std::vector<cv::Point2f> points_i, points_j;
-            for (const auto &match: matches) {
-                points_i.push_back(features_[i][match.queryIdx].pt);
-                points_j.push_back(features_[j][match.trainIdx].pt);
-            }*/
-
 
             const double threshold = 1.0;
             cv::Mat mask_essential, mask_homography;
