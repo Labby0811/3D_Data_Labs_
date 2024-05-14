@@ -4,3 +4,5 @@ bin/*
 build/*
 *.ply
 *.txt
+!results/*.txt
+!results/*.ply
