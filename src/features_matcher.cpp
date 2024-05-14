@@ -82,7 +82,7 @@ void FeatureMatcher::exhaustiveMatching() {
 
             // create matcher
             cv::BFMatcher matcher(cv::NORM_HAMMING);
-            matcher.knnMatch(descriptors_[i], descriptors_[j], knn_matches, 2); // match using clustering
+            matcher.knnMatch(descriptors_[i], descriptors_[j], knn_matches, 2);
 
             const float ratio_threshold = 0.8f;
             std::vector<cv::Point2f> points_i, points_j;
