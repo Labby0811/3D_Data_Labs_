@@ -574,7 +574,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
     bundleAdjustmentIter(new_cam_pose_idx);
     
     //////task7////////////////////////
-    double BB_dist = 0.0;
+    double BB_dist, BB_final_dist, camera_dist = 0.0;
     /////////////////////////////////
 
     // Start to register new poses and observations...
@@ -643,9 +643,6 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         std::vector<cv::Point2d> points0(1), points1(1);
         cv::Mat_<double> proj_mat0(3, 4), proj_mat1(3, 4), hpoints4D;
 
-        //TASK 7//////////////////////
-        vector<int> points_indices;
-        /////////////////////////////////7
         for (int cam_idx = 0; cam_idx < num_cam_poses_; cam_idx++) {
             if (cam_pose_optim_iter_[cam_idx] > 0) {
                 for (auto const &co_iter: cam_observation_[cam_idx]) {
@@ -672,11 +669,6 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
                         // pt[1] = /*X coordinate of the estimated point */;
                         // pt[2] = /*X coordinate of the estimated point */;
                         /////////////////////////////////////////////////////////////////////////////////////////
-
-                        //For task 7/////////////////////////////////////////////
-                        //saving the indices of 3d points seen by the new camera pose
-                        points_indices.push_back(pt_idx);
-                        //////////////////////////////////////////////////////////
 
                         //transform from axis_angle representation to rotation matrix and fill the projection matrix 0
                         cv::Vec3d axis_angle0(cam0_data[0], cam0_data[1], cam0_data[2]);
@@ -714,43 +706,6 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
                             pt[2] = hpoints4D.at<double>(2) / hpoints4D.at<double>(3);
                         }
 
-                        // get 2d points
-                        /*points0.emplace_back(observations_[cam_observation_[new_cam_pose_idx][pt_idx] * 2],
-                                             observations_[cam_observation_[new_cam_pose_idx][pt_idx] * 2 + 1]);
-                        points1.emplace_back(observations_[cam_observation_[cam_idx][pt_idx] * 2],
-                                             observations_[cam_observation_[cam_idx][pt_idx] * 2 + 1]);
-
-                        // define projection matrix of new cam pose
-                        cv::Mat_<double> axis_angle = (cv::Mat_<double>(3, 1)
-                                << cam0_data[0], cam0_data[1], cam0_data[2]);
-                        cv::Mat_<double> t = (cv::Mat_<double>(3, 1) << cam0_data[3], cam0_data[4], cam0_data[5]);
-                        cv::Mat_<double> R(3, 3);
-                        cv::Rodrigues(axis_angle, R);
-                        cv::hconcat(R, t, proj_mat0);
-
-                        // define projection matrix of cam pose
-                        axis_angle = (cv::Mat_<double>(3, 1) << cam1_data[0], cam1_data[1], cam1_data[2]);
-                        t = (cv::Mat_<double>(3, 1) << cam1_data[3], cam1_data[4], cam1_data[5]);
-                        cv::Rodrigues(axis_angle, R);
-                        cv::hconcat(R, t, proj_mat1);
-
-                        cv::triangulatePoints(proj_mat0, proj_mat1, points0, points1, hpoints4D);
-
-                        // check cheirality constraint
-                        if (hpoints4D.at<double>(2, 0) / hpoints4D.at<double>(3, 0) > 0.0) {
-                            n_new_pts++;
-                            pts_optim_iter_[pt_idx] = 1;
-                            double *pt = pointBlockPtr(pt_idx);
-
-                            // convert from homogenous coordinates
-                            pt[0] = hpoints4D.at<double>(0, 0) / hpoints4D.at<double>(3, 0);
-                            pt[1] = hpoints4D.at<double>(1, 0) / hpoints4D.at<double>(3, 0);
-                            pt[2] = hpoints4D.at<double>(2, 0) / hpoints4D.at<double>(3, 0);
-                        }
-
-                        points0.clear();
-                        points1.clear();
-*/
                         /////////////////////////////////////////////////////////////////////////////////////////
 
                     }
@@ -764,27 +719,6 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         for (int i = 0; i < int(cam_pose_optim_iter_.size()); i++)
             std::cout << int(cam_pose_optim_iter_[i]) << " ";
         std::cout << endl;
-
-        ////////////////////////////////////TASK 7///////////////////////////////////////
-        //Here we save the parameters before using BundleAdjustment
-        //to check if the reconstruction diverges
-
-        //previous camera parameters
-        double *cam_i = cameraBlockPtr(new_cam_pose_idx);
-        vector<double> previous_cam_pose;
-        for (int i = 0; i < 6; i++) {
-            previous_cam_pose.push_back(cam_i[i]);
-        }
-
-        //previous point parameters
-        vector<double> previous_point_pose;
-        for (int i = 0; i < points_indices.size(); i++) {
-            double *point_i = pointBlockPtr(points_indices[i]);
-            for (int j = 0; j < 3; j++) {
-                previous_point_pose.push_back(point_i[j]);
-            }
-        }
-        ////////////////////////////////////////////////////////////
 
         // Execute an iteration of bundle adjustment
         bundleAdjustmentIter(new_cam_pose_idx);
@@ -813,7 +747,6 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
                 (fabs(pts[i * point_block_size_]) > max_dist || fabs(pts[i * point_block_size_ + 1]) > max_dist ||
                  fabs(pts[i * point_block_size_ + 2]) > max_dist)) {
                 pts_optim_iter_[i] = -1;
-                //count_rejected_points_++;
             }
         }
         //////////////////////////// Code to be completed (7/7) //////////////////////////////////
@@ -826,8 +759,15 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         // the previous camera and point positions were updated during this iteration.
         /////////////////////////////////////////////////////////////////////////////////////////
 
-        //creating a bounding box to check if the reconstruction diverges
+/*
+        //METHOD 1: 
+        //Try to check if the reconstruction diverges by calculating the bounding box of the points and the cameras
         //finding the limits of the bounding box
+
+        double thresh_point = 0.25;
+        double thresh_camera = 0.14;
+        double thresh_origin = 40.0;
+
         Eigen::Vector3d BB_vol_min = Eigen::Vector3d::Constant((std::numeric_limits<double>::max())),
                         BB_vol_max = Eigen::Vector3d::Constant((-std::numeric_limits<double>::max()));
         
@@ -840,109 +780,83 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
                 }
             }
         }
+        
+        double current_BB_dist = (BB_vol_max - BB_vol_min).norm();
+        std::cout << "\n\nAAAAAAAAAAAAAA\n\n" <<std::endl;
+        std::cout << "\n\nAAAAAAAAAAAAAA\n\n" <<std::endl;
+        std::cout << "Iter " << iter <<" BB_dist: " << current_BB_dist <<std::endl;
+        
+        //METHOD 2:
+        //Try to combine the diagonal dimension of the BB with its position in the space
+        //Find the origin of the BB
+        Eigen::Vector3d middle(BB_vol_max(0) - current_BB_dist/2, BB_vol_max(1) - current_BB_dist/2, BB_vol_max(2) - current_BB_dist/2);
 
-        //finding the maximum distance between the limits of the bounding box
-        BB_dist = (BB_vol_max - BB_vol_min).norm();
+        double middle_dist = (middle - BB_vol_min).norm(); 
+        std::cout << "Middle: " << middle_dist << std::endl;
+        std::cout << "\n\nAAAAAAAAAAAAAA\n\n" <<std::endl;
+        std::cout << "\n\nAAAAAAAAAAAAAA\n\n" <<std::endl;
 
-/*
-      if(count_rejected_points_ > 50)
+
+        //Confront the previous BB at previous iter with the current one
+        if(iter > 1)
         {
-            std::cout << "!!!!!!!Point rejected" << std::endl;
-            return false;
-        }
-
-        const double threshold_cam = 3.0; //to find
-        const double threshold_points = 9.0; //to find
-        int count_points = 0;
-        const int count_points_threshold = 5;   
-        double* current_camera_pose = cameraBlockPtr(new_cam_pose_idx) + 3;
-        vector<double> current_point_pose;
-        for(int i = 0; i < points_indices.size(); i++)
-        {
-            double* point_i = pointBlockPtr(points_indices[i]);
-            for(int j = 0; j < 3; j++)
-            {
-                current_point_pose.push_back(point_i[j]);
-            }
-        }*/
-        /*for (auto const &co_iter: cam_observation_[new_cam_pose_idx])
-            current_point_pose.push_back(pointBlockPtr(co_iter.first));*/
-
-        //finding previous pose of this camera and of its points
-        //done at line 756
-     /*    std::cout << "Checking if the reconstruction diverges" << std::endl;
-        //checking if the current camera pose and the current point pose have changed significantly
-       for(int i = 0; i < 6; i++)
-        {
-            std::cout << "Camera pose: " << current_camera_pose[i] << " " << previous_cam_pose[i] << std::endl;
-            if(abs(current_camera_pose[i] - previous_cam_pose[i]) > threshold_cam)
-            {
-                std::cout << "Camera pose diverged" << std::endl;
+            if ((BB_dist < current_BB_dist - current_BB_dist * thresh_point) || (middle_dist > thresh_origin)){
+                std::cout << "\n\n----------AAAAAAAAAAAAAAAAAAAA---------\n\n" <<std::endl;
+                std::cout << "\n\n----------AAAAAAAAAAAAAAAAAAAA---------\n\n" <<std::endl;
+                std::cout << "\n\n\n\n-----The reconstruction diverged------- \n\n\n\n\n" << std::endl;
+                std::cout << "\n\n----------AAAAAAAAAAAAAAAAAAAA---------\n\n" <<std::endl;
+                std::cout << "\n\n----------AAAAAAAAAAAAAAAAAAAA---------\n\n" <<std::endl;
                 return false;
             }
-        }*/
-     /*   if(sqrt(pow(current_camera_pose[0] - previous_cam_pose[0],2) + pow(current_camera_pose[1] - previous_cam_pose[1], 2) + pow(current_camera_pose[2] - previous_cam_pose[2],2)) > threshold_cam)
+        }
+
+        //setting the current BB as previous  
+        BB_dist = current_BB_dist;
+   */        
+
+        //METHOD 3:
+        //Try to check if the reconstruction diverges by calculating the eigenvalues and eigenvectors of the covariance matrix of the points
+        //See if the eigenvalues are changing drastically from one iteration to the other
+
+        Eigen::MatrixXd points = Eigen::MatrixXd::Zero(num_points_, 3);
+        for (int i = 0; i < num_points_; i++) {
+            if(pts_optim_iter_[i] > 0)
+            {
+                double *point_i = pointBlockPtr(i);
+                for(int j = 0; j < 3; j++)
+                    points(i, j) = point_i[j];
+            }
+        }
+
+        Eigen::Vector3d centroid = points.colwise().mean();
+
+        //calculating the covariance matrix
+        Eigen::MatrixXd centered = points.rowwise() - centroid.transpose();
+        Eigen::MatrixXd cov = (centered.adjoint() * centered) / double(points.rows() - 1);
+
+        //calculating the eigenvalues and the eigenvectors
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(cov);
+        
+        if(eig.info() != Eigen::Success)
         {
-            std::cout << "Camera pose diverged" << std::endl;
+            std::cout << "Eigen decomposition failed" << std::endl;
             return false;
         }
 
-        for(int i = 0; i < current_point_pose.size(); i++)
-        {
-           /* for(int j = 0; j < 3; j++)
-            {
-                std::cout << "Point pose: " << current_point_pose[i*3 + j] << " " << previous_point_pose[i*3 + j] << std::endl;
-                if(abs(current_point_pose[i*3 + j] - previous_point_pose[i*3 + j]) > threshold_points)
-                {
-                    std::cout << "Point pose diverged" << std::endl;
-                    count_points++;
-                    if(count_points > count_points_threshold)
-                    {
-                        std::cout << "!!!!!!!Point pose diverged" << std::endl;
-                        return false;
-                    }
-                }
-            }*/
-         /*   if(sqrt(pow(current_point_pose[i*3 + 0] - previous_point_pose[i*3 + 0],2) + pow(current_point_pose[i*3 + 1] - previous_point_pose[i*3 + 1], 2) + pow(current_point_pose[i*3 + 2] - previous_point_pose[i*3 + 2],2)) > threshold_points)
-            {
-                std::cout << "points pose diverged" << std::endl;
-                count_points++;
-                if(count_points > count_points_threshold)
-                {
-                    std::cout << "!!!!!!!Point pose diverged" << std::endl;
-                    return false;
-                }
-            }
-        }
-       
-        current_point_pose.clear();*/ 
-        previous_point_pose.clear();
-        previous_cam_pose.clear();
-        points_indices.clear();
+        Eigen::Vector3d eigenvalues = eig.eigenvalues();
+        Eigen::Matrix3d eigenvectors = eig.eigenvectors();
+
+        std::cout << "\n\nAAAAAAAAAAAAAA\n\n" <<std::endl;
+        std::cout << "\n\nAAAAAAAAAAAAAA\n\n" <<std::endl;
+        std::cout << "ITERAZIONE" << iter << std::endl;
+        std::cout << "Eigenvalues: " << eigenvalues << std::endl;
+        std::cout << "Eigenvectors: " << eigenvectors << std::endl;
+        std::cout << "\n\nAAAAAAAAAAAAAA\n\n" <<std::endl;
+        std::cout << "\n\nAAAAAAAAAAAAAA\n\n" <<std::endl;
+        
+
         /////////////////////////////////////////////////////////////////////////////////////////
     }
-
-    // Finding the BB after final bundle adjustment iteration
-    Eigen::Vector3d BB_final_vol_min = Eigen::Vector3d::Constant((std::numeric_limits<double>::max())),
-                        BB_final_vol_max = Eigen::Vector3d::Constant((-std::numeric_limits<double>::max()));
-        
-    for (int i = 0; i < num_points_; i++) {
-        if (pts_optim_iter_[i] > 0) {
-            double *point_i = pointBlockPtr(i);
-            for (int j = 0; j < 3; j++) {
-                if (point_i[j] > BB_final_vol_max(j)) BB_final_vol_max(j) = point_i[j];
-                if (point_i[j] < BB_final_vol_min(j)) BB_final_vol_min(j) = point_i[j];
-            }
-        }
-    }
-
-    //finding the maximum distance between the limits of the bounding box  
-    double BB_final_dist = (BB_final_vol_max - BB_final_vol_min).norm();
-    if (BB_final_dist > BB_dist) {
-        std::cout << "The reconstruction diverged" << std::endl;
-        return false;
-    }
-
 
     return true;
 
