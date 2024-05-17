@@ -829,7 +829,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
             }
         }
 
-        double thresh_eigen = 1.0;
+        double thresh_eigen = 1.5;
         double thresh_max_eig2 = 30.0;
         double thresh_min_eig2 = 0.2;
 
