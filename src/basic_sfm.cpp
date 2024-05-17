@@ -572,7 +572,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
 
     // First bundle adjustment iteration: here we have only two camera poses, i.e., the seed pair
     bundleAdjustmentIter(new_cam_pose_idx);
-    
+
     //////task7////////////////////////
     double BB_dist, BB_final_dist, camera_dist = 0.0;
     Eigen::Vector3d prev_eigenvalues = Eigen::Vector3d::Zero();
@@ -696,7 +696,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
 
                         //check cheirality constraint
                         if (checkCheiralityConstraint(new_cam_pose_idx, pt_idx) &&
-                            checkCheiralityConstraint(cam_idx, pt_idx)) { // OCCHIO : it seems wrong
+                            checkCheiralityConstraint(cam_idx, pt_idx)) {
                             n_new_pts++;
                             pts_optim_iter_[pt_idx] = 1;
                             double *pt = pointBlockPtr(pt_idx);
@@ -814,7 +814,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
 
         //setting the current BB as previous  
         BB_dist = current_BB_dist;
-   */        
+   */
 
         //METHOD 3:
         //Try to check if the reconstruction diverges by calculating the eigenvalues of the covariance matrix of the points
@@ -822,10 +822,9 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
 
         Eigen::MatrixXd points = Eigen::MatrixXd::Zero(num_points_, 3);
         for (int i = 0; i < num_points_; i++) {
-            if(pts_optim_iter_[i] > 0)
-            {
+            if (pts_optim_iter_[i] > 0) {
                 double *point_i = pointBlockPtr(i);
-                for(int j = 0; j < 3; j++)
+                for (int j = 0; j < 3; j++)
                     points(i, j) = point_i[j];
             }
         }
@@ -842,9 +841,8 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
 
         //calculating the eigenvalues and the eigenvectors
         Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(cov);
-        
-        if(eig.info() != Eigen::Success)
-        {
+
+        if (eig.info() != Eigen::Success) {
             std::cout << "Eigen decomposition failed" << std::endl;
             return false;
         }
@@ -927,8 +925,6 @@ void BasicSfM::bundleAdjustmentIter(int new_cam_idx) {
                 // The camera position blocks have size (camera_block_size_) of 6 elements,
                 // while the point position blocks have size (point_block_size_) of 3 elements.
                 //////////////////////////////////////////////////////////////////////////////////
-
-                // TODO: check initgooglelogginh
 
                 // Set up the only cost function (also known as residual). This uses
                 // auto-differentiation to obtain the derivative (jacobian).
