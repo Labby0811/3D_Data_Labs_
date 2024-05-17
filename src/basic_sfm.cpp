@@ -575,6 +575,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
     
     //////task7////////////////////////
     double BB_dist, BB_final_dist, camera_dist = 0.0;
+    Eigen::Vector3d prev_eigenvalues = Eigen::Vector3d::Zero();
     /////////////////////////////////
 
     // Start to register new poses and observations...
@@ -764,10 +765,10 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
         //Try to check if the reconstruction diverges by calculating the bounding box of the points and the cameras
         //finding the limits of the bounding box
 
-        double thresh_point = 0.25;
-        double thresh_camera = 0.14;
+        double thresh_point = 0.5;
         double thresh_origin = 40.0;
 
+        //Bounding box of the point cloud
         Eigen::Vector3d BB_vol_min = Eigen::Vector3d::Constant((std::numeric_limits<double>::max())),
                         BB_vol_max = Eigen::Vector3d::Constant((-std::numeric_limits<double>::max()));
         
@@ -781,6 +782,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
             }
         }
         
+        //dimension of the current BB
         double current_BB_dist = (BB_vol_max - BB_vol_min).norm();
         std::cout << "\n\nAAAAAAAAAAAAAA\n\n" <<std::endl;
         std::cout << "\n\nAAAAAAAAAAAAAA\n\n" <<std::endl;
@@ -815,7 +817,7 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
    */        
 
         //METHOD 3:
-        //Try to check if the reconstruction diverges by calculating the eigenvalues and eigenvectors of the covariance matrix of the points
+        //Try to check if the reconstruction diverges by calculating the eigenvalues of the covariance matrix of the points
         //See if the eigenvalues are changing drastically from one iteration to the other
 
         Eigen::MatrixXd points = Eigen::MatrixXd::Zero(num_points_, 3);
@@ -827,6 +829,10 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
                     points(i, j) = point_i[j];
             }
         }
+
+        double thresh_eigen = 1.0;
+        double thresh_max_eig2 = 30.0;
+        double thresh_min_eig2 = 0.2;
 
         Eigen::Vector3d centroid = points.colwise().mean();
 
@@ -848,12 +854,30 @@ bool BasicSfM::incrementalReconstruction(int seed_pair_idx0, int seed_pair_idx1)
 
         std::cout << "\n\nAAAAAAAAAAAAAA\n\n" <<std::endl;
         std::cout << "\n\nAAAAAAAAAAAAAA\n\n" <<std::endl;
-        std::cout << "ITERAZIONE" << iter << std::endl;
+        std::cout << "ITERATION" << iter << std::endl;
         std::cout << "Eigenvalues: " << eigenvalues << std::endl;
         std::cout << "Eigenvectors: " << eigenvectors << std::endl;
         std::cout << "\n\nAAAAAAAAAAAAAA\n\n" <<std::endl;
         std::cout << "\n\nAAAAAAAAAAAAAA\n\n" <<std::endl;
         
+        //Confront the previous eigenvalues at previous iter with the current ones
+        if(iter > 1)
+        {
+            if ((eigenvalues(2) > thresh_max_eig2) || (eigenvalues(2) < thresh_min_eig2) || (fabs(eigenvalues(2) - prev_eigenvalues(2))/prev_eigenvalues(2) > thresh_eigen) ||
+                (fabs(eigenvalues(1) - prev_eigenvalues(1))/prev_eigenvalues(1) > thresh_eigen) || (fabs(eigenvalues(0) - prev_eigenvalues(0))/prev_eigenvalues(0) > thresh_eigen))
+            {
+                std::cout << "\n\n----------AAAAAAAAAAAAAAAAAAAA---------\n\n" <<std::endl;
+                std::cout << "\n\n----------AAAAAAAAAAAAAAAAAAAA---------\n\n" <<std::endl;
+                std::cout << "\n\n\n\n-----The reconstruction diverged------- \n\n\n\n\n" << std::endl;
+                std::cout << "\n\n----------AAAAAAAAAAAAAAAAAAAA---------\n\n" <<std::endl;
+                std::cout << "\n\n----------AAAAAAAAAAAAAAAAAAAA---------\n\n" <<std::endl;
+                return false;
+            }
+        }
+        //setting the current eigenvalues as previous
+        prev_eigenvalues = eigenvalues;
+
+
 
         /////////////////////////////////////////////////////////////////////////////////////////
     }
