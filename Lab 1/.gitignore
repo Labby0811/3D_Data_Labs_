@@ -1,7 +1,0 @@
-.vscode/c_cpp_properties.json
-.vscode/settings.json
-bin/*
-build/*
-*.ply
-!results/*.txt
-!results/*.ply

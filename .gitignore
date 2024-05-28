@@ -2,3 +2,6 @@
 .vscode/settings.json
 bin/*
 build/*
+*.ply
+!results/*.txt
+!results/*.ply
