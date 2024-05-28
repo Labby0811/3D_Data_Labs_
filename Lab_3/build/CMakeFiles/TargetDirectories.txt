@@ -1,4 +1,0 @@
-/media/sf_Lab/3DP_Lab_3/build/CMakeFiles/Registration.dir
-/media/sf_Lab/3DP_Lab_3/build/CMakeFiles/registration.dir
-/media/sf_Lab/3DP_Lab_3/build/CMakeFiles/edit_cache.dir
-/media/sf_Lab/3DP_Lab_3/build/CMakeFiles/rebuild_cache.dir
