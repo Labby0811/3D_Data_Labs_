@@ -1,3 +1,0 @@
-/media/sf_3D_Data_Processing/Lab/3DP_lab_1/build/CMakeFiles/rebuild_cache.dir
-/media/sf_3D_Data_Processing/Lab/3DP_lab_1/build/CMakeFiles/edit_cache.dir
-/media/sf_3D_Data_Processing/Lab/3DP_lab_1/build/CMakeFiles/sgm.dir

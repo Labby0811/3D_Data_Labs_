@@ -1,7 +1,7 @@
 .vscode/c_cpp_properties.json
 .vscode/settings.json
 bin/*
-build/*
+Lab_1/build/*
 *.ply
 !results/*.txt
 !results/*.ply
