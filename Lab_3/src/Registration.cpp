@@ -66,6 +66,7 @@ void Registration::execute_icp_registration(double threshold, int max_iteration,
   //Remember to update transformation_ class variable, you can use source_for_icp_ to store transformed 3d points.
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+
   return;
 }
 
@@ -79,7 +80,35 @@ std::tuple<std::vector<size_t>, std::vector<size_t>, double> Registration::find_
   std::vector<size_t> target_indices;
   std::vector<size_t> source_indices;
   Eigen::Vector3d source_point;
-  double rmse;
+  double mse, rmse;
+  std::vector<int> target_idx(1);
+  std::vector<double> dist2(1);
+  
+  open3d::geometry::KDTreeFlann target_kd_tree(target_);
+  open3d::geometry::PointCloud source_clone = source_;
+  source_clone.Transform(transformation_);
+  int num_source_points  = source_clone.points_.size();
+
+  for(size_t source_idx = 0; source_idx < num_source_points; source_idx++)
+  {
+    
+    source_point = source_clone.points_[source_idx];
+    target_kd_tree.SearchKNN(source_point, 1, target_idx, dist2);
+    
+    //save iff distance is smaller than threshold   -   else discarrd the index
+    if(sqrt(dist2[0]) <= threshold)
+    {
+      target_indices.push_back(target_idx[0]);
+      source_indices.push_back(source_idx);
+
+      //mse update
+      mse = mse * source_idx/(source_idx + 1) + dist2[0]/(source_idx + 1);
+    }
+
+  }
+  
+  rmse = sqrt(mse);
+
   return {source_indices, target_indices, rmse};
 }
 
