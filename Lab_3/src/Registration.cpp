@@ -8,11 +8,36 @@ struct PointDistance
   // To rotate a point given an axis-angle rotation, use
   // the Ceres function:
   // AngleAxisRotatePoint(...) (see ceres/rotation.h)
-  // Similarly to the Bundle Adjustment case initialize the struct variables with the source and  the target point.
+  // Similarly to the Bundle Adjustment case initialize the struct variables with the source and the target point.
   // You have to optimize only the 6-dimensional array (rx, ry, rz, tx ,ty, tz).
   // WARNING: When dealing with the AutoDiffCostFunction template parameters,
   // pay attention to the order of the template parameters
   ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  PointDistance(Eigen::Vector3d source_point, Eigen::Vector3d target_point) : target_point(target_point), source_point(source_point){}
+
+  template<typename T> bool operator()(const T *const transf, T *residuals) const 
+  {
+    T new_source[3];
+
+    ceres::AngleAxisRotatePoint(transf, source_point, new_source);
+
+    for(int i = 0; i < 3; i++)
+      new_source[i] += transf[i + 3];  //translation part of the transformation
+
+
+    for(int i = 0; i < 3; i++)
+      residuals[i] = new_source[i] - target_point[i];
+
+    return true;
+  }
+
+  static ceres::CostFunction *Create(const Eigen::Vector3d source_point, const Eigen::Vector3d target_point) {
+        return (new ceres::AutoDiffCostFunction<PointDistance, 3, 6>(
+                new PointDistance(source_point, target_point)));
+    }
+  
+  Eigen::Vector3d source_point, target_point;
 };
 
 
@@ -65,6 +90,40 @@ void Registration::execute_icp_registration(double threshold, int max_iteration,
   //If mode=="svd" use get_svd_icp_transformation if mode=="lm" use get_lm_icp_transformation.
   //Remember to update transformation_ class variable, you can use source_for_icp_ to store transformed 3d points.
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  if(mode != "svd" && mode != "lm")
+  {
+    std::cout << "Invalid mode" << std::endl;
+    return;
+  }
+
+  Eigen::Matrix4d new_transformation = Eigen::Matrix4d::Identity(4,4);
+  double rmse = 0.0;
+
+  for(int iteration = 0; iteration < max_iteration; iteration++)
+  {
+    auto [source_indices, target_indices, current_rmse] = find_closest_point(threshold);
+
+    if(std::abs(current_rmse - rmse) < relative_rmse)
+    {
+      std::cout << "Converged at iteration: " << iteration << std::endl;
+      return;
+    }
+
+    rmse = current_rmse;
+
+    if(mode == "svd")
+    {
+      new_transformation = get_svd_icp_transformation(source_indices, target_indices);
+    }
+    else
+    {
+      new_transformation = get_lm_icp_registration(source_indices, target_indices);
+    }
+
+    transformation_ = new_transformation * transformation_;
+
+    source_for_icp_.Transform(transformation_);
+  }
 
 
   return;
