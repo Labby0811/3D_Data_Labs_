@@ -92,39 +92,42 @@ void Registration::execute_icp_registration(double threshold, int max_iteration,
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   if(mode != "svd" && mode != "lm")
   {
-    std::cout << "Invalid mode" << std::endl;
+    std::cout << "Invalid mode" << std::endl;   //shouldn't arrive there but a double check isn't a problem
     return;
   }
 
   Eigen::Matrix4d new_transformation = Eigen::Matrix4d::Identity(4,4);
-  double rmse = 0.0;
+  double prev_rmse = 0.0;
 
   for(int iteration = 0; iteration < max_iteration; iteration++)
   {
     auto [source_indices, target_indices, current_rmse] = find_closest_point(threshold);
 
-    if(std::abs(current_rmse - rmse) < relative_rmse)
+    //check if the abs difference between current rmse and prev rmse is less than relative rmse, a terminationn criterion
+    if(std::abs(current_rmse - prev_rmse) < relative_rmse)
     {
       std::cout << "Converged at iteration: " << iteration << std::endl;
       return;
     }
 
-    rmse = current_rmse;
+    prev_rmse = current_rmse;
 
     if(mode == "svd")
     {
       new_transformation = get_svd_icp_transformation(source_indices, target_indices);
     }
-    else
+    else  //mode == "lm"
     {
       new_transformation = get_lm_icp_registration(source_indices, target_indices);
     }
-
-    transformation_ = new_transformation * transformation_;
+  
+    set_transformation(new_transformation * transformation_);
 
     source_for_icp_.Transform(transformation_);
+
   }
 
+  std::cout <<  "Diverged: MAX_ITERATION surpassed." << std::endl;
 
   return;
 }
@@ -179,6 +182,77 @@ Eigen::Matrix4d Registration::get_svd_icp_transformation(std::vector<size_t> sou
   //Remember to manage the special reflection case.
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   Eigen::Matrix4d transformation = Eigen::Matrix4d::Identity(4,4);
+
+  //We use source_for_icp to use the transformed source cloud directly
+  open3d::geometry::PointCloud source_clone = source_for_icp_; 
+  open3d::geometry::PointCloud target_clone = target_;
+
+  //Compute centroids
+  Eigen::Vector3d source_centroid = Eigen::Vector3d::Zero();
+  Eigen::Vector3d target_centroid = Eigen::Vector3d::Zero();
+  int source_size = source_clone.points_.size();
+  int target_size = target_clone.points_.size();
+
+  //dc = (dc + di)/N
+  for(int i = 0; i < source_size; i++)
+    source_centroid += source_clone.points_[i];
+  
+  source_centroid /= source_size;
+
+  //mc = (mc + mi)/N
+  for(int i = 0; i < target_size; i++)
+    target_centroid += target_clone.points_[i];
+  
+  target_centroid /= target_size;
+
+
+  //Now that we've found the centroids we can subtract them from their respective clouds points and create the 3X3 matrix W
+  //Creating the subtracted source and target matrices di' = (di - dc) and mi' = (mi - mc)
+  Eigen::MatrixXd subtracted_source(3, source_indices.size());
+  Eigen::MatrixXd subtracted_target(3, target_indices.size());
+  Eigen::Matrix3d W = Eigen::Matrix3d::Zero();
+  
+  //filling the subtracted source and target matrices
+  for (size_t i = 0; i < source_indices.size(); i++)  //source_indices.size() == target_indices.size() because they are coupled
+  {
+    //saving current source and target points
+    Eigen::Vector3d source_point = source_clone.points_[source_indices[i]];
+    Eigen::Vector3d target_point = target_clone.points_[target_indices[i]];
+
+    //subtracting the centroids
+    subtracted_source.col(i) = source_point - source_centroid;
+    subtracted_target.col(i) = target_point - target_centroid;
+    W = W + subtracted_target * subtracted_source.transpose();  //W = W + (mi - mc) * (di - dc)^T
+  }
+
+  //We now have to find R and t
+  //SVD computation
+  Eigen::Matrix3d R = Eigen::Matrix3d::Identity();
+  Eigen::Vector3d t = Eigen::Vector3d::Zero();
+  
+  Eigen::JacobiSVD<Eigen::MatrixXd> svd(W, Eigen::ComputeFullU | Eigen::ComputeFullV);
+
+  //We have to check if the determinant of the matrix is negative
+  //Note that det(U*V^T) = det(U) * det(V^T) = det(U) * det(V),
+  //so for semplification we can check the product of the determinants
+  if(svd.matrixU().determinant() * svd.matrixV().determinant() == -1) //Special reflection case(if corrupted data is present)
+  {
+    Eigen::Matrix3d diag = Eigen::Matrix3d::Identity();
+    diag(2,2) = -1;
+    R = svd.matrixU() * diag * svd.matrixV().transpose();  //R = U * diag(1, 1, -1) * V^T
+  }
+  
+  else //Standard case
+    R = svd.matrixU() * svd.matrixV().transpose();  //R = U * V^T
+
+
+  //Now we have to find the translation vector
+  t = target_centroid - R * source_centroid;   //t = mc - R * dc
+
+  //FINAL TRANSFORMATION MATRIX
+  transformation.block<3,3>(0,0) = R;
+  transformation.block<3,1>(0,3) = t;
+  
   return transformation;
 }
 
