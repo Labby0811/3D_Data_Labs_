@@ -18,16 +18,19 @@ struct PointDistance
 
   template<typename T> bool operator()(const T *const transf, T *residuals) const 
   {
-    T new_source[3];
+    Eigen::Matrix<T, 3, 1> old_source = {T(source_point[0]), T(source_point[1]), T(source_point[2])};
+    Eigen::Matrix<T, 3, 1> new_source;
 
-    ceres::AngleAxisRotatePoint(transf, source_point, new_source);
+    //apply rotation
+    ceres::AngleAxisRotatePoint(transf, old_source.data(), new_source.data());
 
+    //apply translation
     for(int i = 0; i < 3; i++)
-      new_source[i] += transf[i + 3];  //translation part of the transformation
+      new_source[i] += transf[i + 3];  
 
-
+    //compute residuals
     for(int i = 0; i < 3; i++)
-      residuals[i] = new_source[i] - target_point[i];
+      residuals[i] = new_source[i] - T(target_point[i]);
 
     return true;
   }
@@ -124,6 +127,7 @@ void Registration::execute_icp_registration(double threshold, int max_iteration,
     set_transformation(new_transformation * transformation_);
 
     source_for_icp_.Transform(transformation_);
+    std::cout << "Transformation matrix: " << transformation_ << std::endl;
 
   }
 
@@ -168,9 +172,9 @@ std::tuple<std::vector<size_t>, std::vector<size_t>, double> Registration::find_
     }
 
   }
-  
-  rmse = sqrt(mse);
 
+  rmse = sqrt(mse);
+  std::cout << "RMSE: " << rmse << std::endl;
   return {source_indices, target_indices, rmse};
 }
 
@@ -235,7 +239,7 @@ Eigen::Matrix4d Registration::get_svd_icp_transformation(std::vector<size_t> sou
   //We have to check if the determinant of the matrix is negative
   //Note that det(U*V^T) = det(U) * det(V^T) = det(U) * det(V),
   //so for semplification we can check the product of the determinants
-  if(svd.matrixU().determinant() * svd.matrixV().determinant() == -1) //Special reflection case(if corrupted data is present)
+  if((svd.matrixU().determinant() * svd.matrixV().determinant()) == -1) //Special reflection case(if corrupted data is present)
   {
     Eigen::Matrix3d diag = Eigen::Matrix3d::Identity();
     diag(2,2) = -1;
@@ -274,11 +278,37 @@ Eigen::Matrix4d Registration::get_lm_icp_registration(std::vector<size_t> source
 
   std::vector<double> transformation_arr(6, 0.0);
   int num_points = source_indices.size();
+
+  //saving the source points in a clone
+  open3d::geometry::PointCloud source_clone = source_for_icp_;
+
+  ceres::Problem problem;
+  ceres::Solver::Summary summary;
+
   // For each point....
   for( int i = 0; i < num_points; i++ )
   {
-    
+    ceres::CostFunction* cost_function =PointDistance::Create(source_clone.points_[source_indices[i]], target_.points_[target_indices[i]]);
+    problem.AddResidualBlock(cost_function,
+                           nullptr /* squared loss */,
+                           transformation_arr.data());
   }
+
+  ceres::Solve(options, &problem, &summary);
+
+  //Now we have to convert the euler angles in a rotation matrix
+  Eigen::Matrix3d R = Eigen::Matrix3d::Identity();  
+  R = (Eigen::AngleAxisd(transformation_arr[0], Eigen::Vector3d::UnitX()) * 
+  Eigen::AngleAxisd(transformation_arr[1], Eigen::Vector3d::UnitY()) * 
+  Eigen::AngleAxisd(transformation_arr[2], Eigen::Vector3d::UnitZ())).toRotationMatrix();
+
+  //Now we have to find the translation vector
+  Eigen::Vector3d t = Eigen::Vector3d::Zero();
+  t << transformation_arr[3], transformation_arr[4], transformation_arr[5];
+
+  //Saving the transformation matrix
+  transformation.block<3,3>(0,0) = R;
+  transformation.block<3,1>(0,3) = t;
 
   return transformation;
 }
