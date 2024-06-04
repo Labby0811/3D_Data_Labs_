@@ -104,7 +104,10 @@ void Registration::execute_icp_registration(double threshold, int max_iteration,
 
   for(int iteration = 0; iteration < max_iteration; iteration++)
   {
-    auto [source_indices, target_indices, current_rmse] = find_closest_point(threshold);
+    std::tuple<std::vector<size_t>, std::vector<size_t>, double> closest_pt = find_closest_point(threshold);
+    std::vector<size_t> source_indices = std::get<0>(closest_pt);
+    std::vector<size_t> target_indices = std::get<1>(closest_pt);
+    double current_rmse = std::get<2>(closest_pt);
 
     //check if the abs difference between current rmse and prev rmse is less than relative rmse, a terminationn criterion
     if(std::abs(current_rmse - prev_rmse) < relative_rmse)
@@ -123,11 +126,15 @@ void Registration::execute_icp_registration(double threshold, int max_iteration,
     {
       new_transformation = get_lm_icp_registration(source_indices, target_indices);
     }
-  
-    set_transformation(new_transformation * transformation_);
 
-    source_for_icp_.Transform(transformation_);
-    std::cout << "Transformation matrix: " << transformation_ << std::endl;
+    Eigen::Matrix4d prev_transf = get_transformation(); 
+    Eigen::Matrix4d current_transformation = Eigen::Matrix4d::Identity(4,4);
+    current_transformation.block<3,3>(0,0) = new_transformation.block<3,3>(0,0) * prev_transf.block<3,3>(0,0);
+    current_transformation.block<3,1>(0,3) = new_transformation.block<3,3>(0,0) * prev_transf.block<3,1>(0,3) + new_transformation.block<3,1>(0,3);
+    set_transformation(current_transformation);
+
+    source_for_icp_.Transform(new_transformation);
+    std::cout << "Transformation matrix: " << std::endl;
 
   }
 
@@ -151,8 +158,8 @@ std::tuple<std::vector<size_t>, std::vector<size_t>, double> Registration::find_
   std::vector<double> dist2(1);
   
   open3d::geometry::KDTreeFlann target_kd_tree(target_);
-  open3d::geometry::PointCloud source_clone = source_;
-  source_clone.Transform(transformation_);
+  open3d::geometry::PointCloud source_clone = source_for_icp_;
+  
   int num_source_points  = source_clone.points_.size();
 
   for(size_t source_idx = 0; source_idx < num_source_points; source_idx++)
@@ -212,10 +219,8 @@ Eigen::Matrix4d Registration::get_svd_icp_transformation(std::vector<size_t> sou
 
   //Now that we've found the centroids we can subtract them from their respective clouds points and create the 3X3 matrix W
   //Creating the subtracted source and target matrices di' = (di - dc) and mi' = (mi - mc)
-  Eigen::MatrixXd subtracted_source(3, source_indices.size());
-  Eigen::MatrixXd subtracted_target(3, target_indices.size());
   Eigen::Matrix3d W = Eigen::Matrix3d::Zero();
-  
+
   //filling the subtracted source and target matrices
   for (size_t i = 0; i < source_indices.size(); i++)  //source_indices.size() == target_indices.size() because they are coupled
   {
@@ -224,9 +229,9 @@ Eigen::Matrix4d Registration::get_svd_icp_transformation(std::vector<size_t> sou
     Eigen::Vector3d target_point = target_clone.points_[target_indices[i]];
 
     //subtracting the centroids
-    subtracted_source.col(i) = source_point - source_centroid;
-    subtracted_target.col(i) = target_point - target_centroid;
-    W = W + subtracted_target * subtracted_source.transpose();  //W = W + (mi - mc) * (di - dc)^T
+    source_point = source_point - source_centroid;
+    target_point = target_point - target_centroid;
+    W = W + target_point * source_point.transpose();  //W = W + (mi - mc) * (di - dc)^T
   }
 
   //We now have to find R and t
@@ -248,7 +253,6 @@ Eigen::Matrix4d Registration::get_svd_icp_transformation(std::vector<size_t> sou
   
   else //Standard case
     R = svd.matrixU() * svd.matrixV().transpose();  //R = U * V^T
-
 
   //Now we have to find the translation vector
   t = target_centroid - R * source_centroid;   //t = mc - R * dc
