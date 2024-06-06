@@ -3,6 +3,7 @@
 
 struct PointDistance
 { 
+  //TASK 3
   ////////////////////////////////////////////////////////////////////////////////////////////////////
   // This class should include an auto-differentiable cost function. 
   // To rotate a point given an axis-angle rotation, use
@@ -18,6 +19,7 @@ struct PointDistance
 
   template<typename T> bool operator()(const T *const transf, T *residuals) const 
   {
+    //saving the source point
     Eigen::Matrix<T, 3, 1> old_source = {T(source_point[0]), T(source_point[1]), T(source_point[2])};
     Eigen::Matrix<T, 3, 1> new_source;
 
@@ -36,10 +38,11 @@ struct PointDistance
   }
 
   static ceres::CostFunction *Create(const Eigen::Vector3d source_point, const Eigen::Vector3d target_point) {
-        return (new ceres::AutoDiffCostFunction<PointDistance, 3, 6>(
+        return (new ceres::AutoDiffCostFunction<PointDistance, 3, 6>(   //3D residuals and 6 parameters to optimize (rx, ry, rz, tx, ty, tz)
                 new PointDistance(source_point, target_point)));
     }
   
+  //initialize source and target points
   Eigen::Vector3d source_point, target_point;
 };
 
@@ -84,7 +87,7 @@ void Registration::draw_registration_result()
 }
 
 
-
+//TASK 5
 void Registration::execute_icp_registration(double threshold, int max_iteration, double relative_rmse, std::string mode)
 { 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -93,6 +96,8 @@ void Registration::execute_icp_registration(double threshold, int max_iteration,
   //If mode=="svd" use get_svd_icp_transformation if mode=="lm" use get_lm_icp_transformation.
   //Remember to update transformation_ class variable, you can use source_for_icp_ to store transformed 3d points.
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  
+  //Check if the mode is valid
   if(mode != "svd" && mode != "lm")
   {
     std::cout << "Invalid mode" << std::endl;   //shouldn't arrive there but a double check isn't a problem
@@ -102,6 +107,7 @@ void Registration::execute_icp_registration(double threshold, int max_iteration,
   Eigen::Matrix4d new_transformation = Eigen::Matrix4d::Identity(4,4);
   double prev_rmse = 0.0;
 
+  //main loop
   for(int iteration = 0; iteration < max_iteration; iteration++)
   {
     std::tuple<std::vector<size_t>, std::vector<size_t>, double> closest_pt = find_closest_point(threshold);
@@ -115,9 +121,11 @@ void Registration::execute_icp_registration(double threshold, int max_iteration,
       std::cout << "Converged at iteration: " << iteration << std::endl;
       return;
     }
-
+    
+    //update the prev_rmse
     prev_rmse = current_rmse;
 
+    //get the new transformation
     if(mode == "svd")
     {
       new_transformation = get_svd_icp_transformation(source_indices, target_indices);
@@ -129,46 +137,52 @@ void Registration::execute_icp_registration(double threshold, int max_iteration,
 
     Eigen::Matrix4d prev_transf = get_transformation(); 
     Eigen::Matrix4d current_transformation = Eigen::Matrix4d::Identity(4,4);
+    
+    //update the transformation matrix
     current_transformation.block<3,3>(0,0) = new_transformation.block<3,3>(0,0) * prev_transf.block<3,3>(0,0);
     current_transformation.block<3,1>(0,3) = new_transformation.block<3,3>(0,0) * prev_transf.block<3,1>(0,3) + new_transformation.block<3,1>(0,3);
     set_transformation(current_transformation);
 
+    //update the source cloud
     source_for_icp_.Transform(new_transformation);
-    std::cout << "Transformation matrix: " << std::endl;
-
   }
 
+  //if we reach this point it means that the algorithm diverged
   std::cout <<  "Diverged: MAX_ITERATION surpassed." << std::endl;
 
   return;
 }
 
 
+//TASK 1
 std::tuple<std::vector<size_t>, std::vector<size_t>, double> Registration::find_closest_point(double threshold)
 { ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   //Find source and target indices: for each source point find the closest one in the target and discard if their 
   //distance is bigger than threshold
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   
+  //initialize variables
   std::vector<size_t> target_indices;
   std::vector<size_t> source_indices;
   Eigen::Vector3d source_point;
   double mse, rmse;
-  std::vector<int> target_idx(1);
+  std::vector<int> target_idx(1);  //to save the index of the closest target point
   std::vector<double> dist2(1);
   
+  //exploiting the KDTree to find the closest point
   open3d::geometry::KDTreeFlann target_kd_tree(target_);
   open3d::geometry::PointCloud source_clone = source_for_icp_;
   
   int num_source_points  = source_clone.points_.size();
 
+  //start the search across the source points
   for(size_t source_idx = 0; source_idx < num_source_points; source_idx++)
-  {
-    
+  {   
     source_point = source_clone.points_[source_idx];
+    //search the closest point (so K = 1) and save the index and the square distance
     target_kd_tree.SearchKNN(source_point, 1, target_idx, dist2);
     
-    //save iff distance is smaller than threshold   -   else discarrd the index
+    //save iff distance is smaller than threshold   -   else discard the indices
     if(sqrt(dist2[0]) <= threshold)
     {
       target_indices.push_back(target_idx[0]);
@@ -180,11 +194,12 @@ std::tuple<std::vector<size_t>, std::vector<size_t>, double> Registration::find_
 
   }
 
+  //compute rmse
   rmse = sqrt(mse);
-  std::cout << "RMSE: " << rmse << std::endl;
   return {source_indices, target_indices, rmse};
 }
 
+//TASK 2
 Eigen::Matrix4d Registration::get_svd_icp_transformation(std::vector<size_t> source_indices, std::vector<size_t> target_indices){
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   //Find point clouds centroids and subtract them. 
@@ -217,8 +232,9 @@ Eigen::Matrix4d Registration::get_svd_icp_transformation(std::vector<size_t> sou
   target_centroid /= target_size;
 
 
-  //Now that we've found the centroids we can subtract them from their respective clouds points and create the 3X3 matrix W
+  //Now that we've found the centroids we can subtract them from their respective point clouds points 
   //Creating the subtracted source and target matrices di' = (di - dc) and mi' = (mi - mc)
+  //and create the 3X3 matrix W = sum(mi' * di'^T)
   Eigen::Matrix3d W = Eigen::Matrix3d::Zero();
 
   //filling the subtracted source and target matrices
@@ -229,8 +245,8 @@ Eigen::Matrix4d Registration::get_svd_icp_transformation(std::vector<size_t> sou
     Eigen::Vector3d target_point = target_clone.points_[target_indices[i]];
 
     //subtracting the centroids
-    source_point = source_point - source_centroid;
-    target_point = target_point - target_centroid;
+    source_point = source_point - source_centroid; //di' = (di - dc)
+    target_point = target_point - target_centroid; //mi' = (mi - mc)
     W = W + target_point * source_point.transpose();  //W = W + (mi - mc) * (di - dc)^T
   }
 
@@ -247,7 +263,7 @@ Eigen::Matrix4d Registration::get_svd_icp_transformation(std::vector<size_t> sou
   if((svd.matrixU().determinant() * svd.matrixV().determinant()) == -1) //Special reflection case(if corrupted data is present)
   {
     Eigen::Matrix3d diag = Eigen::Matrix3d::Identity();
-    diag(2,2) = -1;
+    diag(2,2) = -1; //diagonal matrix with -1 in the last element
     R = svd.matrixU() * diag * svd.matrixV().transpose();  //R = U * diag(1, 1, -1) * V^T
   }
   
@@ -264,6 +280,7 @@ Eigen::Matrix4d Registration::get_svd_icp_transformation(std::vector<size_t> sou
   return transformation;
 }
 
+//TASK 4
 Eigen::Matrix4d Registration::get_lm_icp_registration(std::vector<size_t> source_indices, std::vector<size_t> target_indices)
 {
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -280,10 +297,11 @@ Eigen::Matrix4d Registration::get_lm_icp_registration(std::vector<size_t> source
   options.num_threads = 4;
   options.max_num_iterations = 100;
 
+  //initialize the transformation array
   std::vector<double> transformation_arr(6, 0.0);
   int num_points = source_indices.size();
 
-  //saving the source points in a clone
+  //saving the transformed source points in a clone
   open3d::geometry::PointCloud source_clone = source_for_icp_;
 
   ceres::Problem problem;
@@ -292,7 +310,10 @@ Eigen::Matrix4d Registration::get_lm_icp_registration(std::vector<size_t> source
   // For each point....
   for( int i = 0; i < num_points; i++ )
   {
-    ceres::CostFunction* cost_function =PointDistance::Create(source_clone.points_[source_indices[i]], target_.points_[target_indices[i]]);
+    //create the cost function
+    ceres::CostFunction* cost_function = PointDistance::Create(source_clone.points_[source_indices[i]],
+                                                               target_.points_[target_indices[i]]);
+    //add the residual block to the problem
     problem.AddResidualBlock(cost_function,
                            nullptr /* squared loss */,
                            transformation_arr.data());
