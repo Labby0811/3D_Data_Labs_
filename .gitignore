@@ -2,6 +2,6 @@
 .vscode/settings.json
 bin/*
 Lab_*/build/*
-*.ply
+
 !results/*.txt
 !results/*.ply
